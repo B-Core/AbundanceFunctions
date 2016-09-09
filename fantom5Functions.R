@@ -33,7 +33,7 @@ getTopXCellTypes = function(ff_mat=NULL, CHROMONUM, range_v, x, colStrWithChromL
 
 
 convertBioMartToBed = function(BioMart_mat){
-  chromName = gsub('^ *', 'chr', BioMart_mat[,"Chromosome Name"])
+  chromName = gsub('^ *', '', BioMart_mat[,"Chromosome Name"])
   start = as.numeric(BioMart_mat[,"Start (bp)"])-1
   end = as.numeric(BioMart_mat[,"End (bp)"])
   final_mat = cbind(chromName, start, end)
