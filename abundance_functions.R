@@ -58,7 +58,7 @@ add_enrichment_ratio_column = function(pathway_annotation_dt){
 
 
 
-generate_adj_log_ratio_p_val_q_val_mn_abundance_general = function(lm.obj, dpath, abundance_mat_w_rownames,name_of_abundance_mat_w_rownames=NULL, grep_str_for_cols_we_want = '^.*$', vec_of_strings_you_want_to_rename_by=NULL, feature_ID = "Probe_Set_ID",annotation_status=F,annotation_path = getwd(), feature_ID_col_name_in_annotation="transcript_cluster_id", phenotype_dt=tx, vec_of_phenotype_colnames_you_want_to_take_treatment_means_of = colnames(phenotype_dt)[-1]){
+generate_adj_log_ratio_p_val_q_val_mn_abundance_general = function(lm.obj, dpath, abundance_mat_w_rownames,name_of_abundance_mat_w_rownames=NULL, grep_str_for_cols_we_want = '^.*$', vec_of_strings_you_want_to_rename_by=NULL, feature_ID = "Probe_Set_ID",annotation_status=F,annotation_path = getwd(), feature_ID_col_name_in_annotation="transcript_cluster_id", phenotype_dt=tx, vec_of_phenotype_colnames_you_want_to_take_treatment_means_of = colnames(tx)[-1]){
   betas = t(lm.obj$coefficients)
   rownames(betas) = rownames(abundance_mat_w_rownames)
   beta_cols_we_care_about = grep(grep_str_for_cols_we_want, colnames(betas))
