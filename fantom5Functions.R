@@ -1,4 +1,4 @@
-getTopXCellTypes = function(ff_mat=NULL, CHROMONUM, range_v, x){
+getTopXCellTypes = function(ff_mat=NULL, CHROMONUM, range_v, x, colStrWithChromLocations_str){
   if(is.null(ff_mat)){
     require(data.table)
     ff_mat = as.matrix(fread("grep -v '^#' /home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt"))
@@ -11,7 +11,7 @@ getTopXCellTypes = function(ff_mat=NULL, CHROMONUM, range_v, x){
     #make sure it goes in correct order
     range_v = range(range_v)
     #parse the first column of ff_mat, which has format of, chr10:100150986..100150988,+
-    annotationParsed_ls = strsplit(ff_mat[,"00Annotation"], split='chr|:|\\.\\.|,')
+    annotationParsed_ls = strsplit(ff_mat[,colStrWithChromLocations_str], split='chr|:|\\.\\.|,')
     #find first list element with 5
     FIRST=1
     while (length(annotationParsed_ls[[FIRST]])<5) {
@@ -29,4 +29,13 @@ getTopXCellTypes = function(ff_mat=NULL, CHROMONUM, range_v, x){
     }
     return(matches_ls)
   }
+}
+
+
+convertBioMartToBed = function(BioMart_mat){
+  chromName = gsub('^ *', 'chr', BioMart_mat[,"Chromosome Name"])
+  start = as.numeric(BioMart_mat[,"Start (bp)"])-1
+  end = as.numeric(BioMart_mat[,"End (bp)"])
+  final_mat = cbind(chromName, start, end)
+  return(final_mat)
 }
