@@ -42,7 +42,7 @@ convertBioMartToBed = function(BioMart_mat, justThreeCols=F){
   if(justThreeCols == T){
     final_mat = cbind(chromName, start, end)
   }else{
-    fina_mat = cbind(chromName, start, end, BioMart_mat[,4:ncol(BioMart_mat)])
+    final_mat = cbind(chromName, start, end, BioMart_mat[,4:ncol(BioMart_mat)])
   }
   return(final_mat)
 }
