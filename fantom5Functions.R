@@ -39,7 +39,7 @@ convertBioMartToBed = function(BioMart_mat, justThreeCols=F){
   chromName = gsub('^ *', '', BioMart_mat[,"Chromosome Name"])
   start = as.numeric(BioMart_mat[,"Start (bp)"])-1
   end = as.numeric(BioMart_mat[,"End (bp)"])
-  if(justThreeCols=T){
+  if(justThreeCols == T){
     final_mat = cbind(chromName, start, end)
   }else{
     fina_mat = cbind(chromName, start, end, BioMart_mat[,4:ncol(BioMart_mat)])
