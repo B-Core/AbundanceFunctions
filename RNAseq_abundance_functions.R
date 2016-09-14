@@ -193,4 +193,131 @@ norm_matrix = function(tag, raw.mat, expt.design, normvec=c("loess","qspln","qua
   return(LoM.norm)
 }
 
+regressMatrix = function(normmat, expt.design, lm_expression, response_var="y", contr_list=NULL, source_me=c("/home/users/burchard/R-utils/lm.pval.R")){
+  # function to run linear regression on multiresponse data matrix with given model and optional contrasts
+  # Arguments
+  # source_me: character vector of R function file names to source
+  # normmat: a matrix of normalized (sample-bias-reduced) abundance data
+  #  rownames are unique identifiers for features measured per row
+  #  colnames are unique identifiers for samples
+  # expt.design: a named list of character vectors, each vector having one element per sample in raw.mat column order, each string representing a design factor OR covariate in the conduct of the experiment
+  #   examples: Treatment, Gender, Date, Contaminant_marker_gene_abundance, Sample_purity
+  # lm_expression: a string comprising an expression of the form "y  ~ model"
+  # response_var gives the string to be used as the name of the response matrix
+  #   by default, y is used to represent the multiresponse data matrix
+  #   the predictors in the model MUST be named elements of expt.design
+  #   example: "y ~ Treatment + Gender"
+  # contr_list: a named list, with one element per expt.design element name used in lm_expression, whose contents are either a valid contrasts matrix or a list with elements "baseline" and "contr.FUN"
+  #   if contrasts is NULL, default coding will be used
+  #      R's default: dummy or treatment contrast, comparing each level to base
+  #        by default, alphanumerically first factor level is base
+  #        regression coefficients are adjusted group mean ratios to base
+  #      useful alternative: summed contrast, comparing levels to grand mean
+  #        by default, alphanumerically last factor level is omitted
+  #        regression coefficients are adjusted group mean ratios to grand mean
+  #   example matrix: dummy or treatment contrast with non-default baseline
+  #                   this matrix causes Tx abundances to be compared to Sham
+  #                     14d TxA  14d TxB
+  #      14d Sham          0        0
+  #      14d TxA           1        0
+  #      14d TxB           0        1
+  #   example list: this list will cause creation of the matrix above
+  #   list(baseline="Sham", contr.FUN="contr.treatment")
+
+  # imports
+  require(qvalue)
+  source(source_me) # very trusting!
+
+  # constants
+  contr_list_names = c("baseline","contr.FUN"); fundx=2; basedx=1
+
+  # calculate contrasts matrices if contrasts input is provided
+  if( !is.null(contr_list) ){
+    contr_lsmat = vector(mode='list',length=length(contr_list))
+    for( fac in names(contr_list) ){
+      # test input assumptions
+      if( !any(grepl(fac, names(expt.design))) ){
+        stop(paste("Factor",fac,"in contrasts list is not in exptl design list"))
+      }
+      if( !typeof(expt.design[[fac]]) %in% c("character","double","integer") | 
+        !is.null(attr(expt.design[[fac]],"dim")) ){
+        stop(paste("Factor",fac,"is not a string or numeric vector"))
+      }
+      # use tested input
+      if(is.list(contr_list[[fac]]) ){
+        if(sum(names(contr_list[[fac]]) %in% contr_list_names)<length(contr_list_names) ){
+          stop("Missing",paste(contr_list_names,collapse=" or "),"for",fac)
+        }
+        # create matrix for list input
+        myfun = contr_list[[fac]][[contr_list_names[fundx]]]
+        mybase = contr_list[[fac]][[contr_list_names[basedx]]]
+        if(myfun=="contr.treatment"){
+          contr_lsmat[[fac]] = contr.treatment( levels(as.factor(expt.design[[fac]])), base = which(levels(as.factor(expt.design[[fac]])) == mybase) )
+        } else if(myfun=="contr.sum"){
+          fac_v = c( setdiff(levels(as.factor(expt.design[[fac]])), mybase), mybase) # put baseline last for contr.sum
+          contr_lsmat[[fac]] = contr.sum(fac_v)
+        } else {
+          stop(paste("Contrast function",myfun,"is not yet supported"))
+        }
+        # recover matrix input
+      } else if(is.matrix(contr_list[[fac]]) ){
+        contr_lsmat[fac] = contr_list[fac]
+      } else if(class(contr_list[[fac]])=="AsIs" & length(dim(contr_list[[fac]]))==2 ){ # matrix wrapped in I()
+        class(contr_lsmat[[fac]]) = "matrix"
+        contr_lsmat[fac] = contr_list[fac]
+      } else {
+        stop(paste("Contrasts specification for",fac,",is not a list or matrix"))
+      }
+    }
+  }
+  
+  # set up regression formula with environment
+  # test input
+  if( typeof(lm_expression) != "character" | !is.null(attr(lm_expression,"dim")) ){
+    stop("Regression formula was not supplied as a string") 
+  }
+  # check supplied factors for presence in formula
+  lm_fac = regmatches(lm_expression,gregexpr('(\\w+)',lm_expression))[[1]]
+  lm_fac = setdiff(lm_fac, response_var)
+  n = length(lm_fac) - sum(lm_fac %in% names(expt.design)) 
+  if( n != 0 ){
+    stop(n,"regression factors not found in exptl design list")
+  }
+  # pull out factors supplied in exptl design for use in lm, & assign contrasts
+  lm_list = lapply(expt.design[names(expt.design) %in% lm_fac],as.factor)
+  # add contrasts if contrasts input was given
+  if( !is.null(contr_list) ){
+    for(fac in names(lm_list) ){
+      if( any(grepl( fac, names(contr_lsmat) )) ){
+        contrasts(lm_list[[fac]]) = contr_lsmat[[fac]]
+      }
+    }
+  }
+
+  # set up environment for regression, with desired factors present
+  # use parent of globalenv as parent of regression env to avoid confounding
+  lm_env = list2env( lm_list, parent=parent.env(globalenv()) )
+  assign(x=response_var, value=t(normmat), envir=lm_env)
+  lm_formula = as.formula( lm_expression, env=lm_env)
+
+  # run regression 
+  obj_lm = lm( lm_formula)
+  b_mat = t(obj_lm$coefficients)
+  p_mat = t(lm.pval(obj_lm)$pval); class(p_mat) = "matrix"
+  # replace NA p-values (bad for qvalue), at risk of spike at 1 (bad for qvalue)
+  p_mat[is.na(p_mat)] = 1
+
+  # convert p-values to q-values for evaluation of factor impact on abundances
+  q_list = NULL
+  for( fac in colnames(p_mat) ){
+    myflag = TRUE
+    obj_qvalue = tryCatch( qvalue(p_mat[,fac]), 
+          error=function(e){myflag=FALSE; cat("No qvalues for",fac,"\n")} )
+    if( myflag) { q_list[[fac]] = I(obj_qvalue) }
+  }
+
+  # return values
+  return( list( b_mat=b_mat, p_mat=p_mat, q_list=q_list ) )
+
+}
 

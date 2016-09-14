@@ -402,7 +402,7 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
   u.col.classes = unique(colvec) 
 
   # plot MDS and capture numeric results
-  obj_MDS = plotMDS(normmat[mymask,], col=colvec, labels=colnames(normmat),
+  obj_MDS = plotMDS(normmat, col=colvec, labels=colnames(normmat),
           top=sum(mymask), main=plotdata$plottitle, cex=.6 )
 
   # add legend
