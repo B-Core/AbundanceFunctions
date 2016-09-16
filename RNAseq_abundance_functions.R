@@ -144,15 +144,18 @@ norm_matrix = function(tag, raw.mat, expt.design, normvec=c("loess","qspln","qua
   # set background adjustment
   bkgd = bkgdFUN(raw.mat)
 
-
   # not yet implemented:
   # if indicated, normalize by selected annCol
 
-
   # normalizations used for microarray RNA expression data
   # add background to raw data for logging and low-end noise amelioration
-  LoM.norm = vector(mode='list',length=length(normvec) )
-  names(LoM.norm) = normvec
+  LoM.norm = vector(mode='list',length=length(normvec)+1 )
+  names(LoM.norm) = c("alograw", normvec)
+  # Create a log2 transform of the raw matrix. Do not add background!
+  mynorm = "alograw"
+  message(sprintf("mynorm = %s", mynorm))
+  LoM.norm[[mynorm]] = log2(raw.mat+1)
+
   for( i in 1:length(normvec) ){
     mynorm = normvec[i]
     myargs = normarg[[i]]
