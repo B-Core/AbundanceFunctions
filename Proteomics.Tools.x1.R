@@ -50,7 +50,7 @@ rqd.libraries = function (path) {
 }
 
 # ******** Plain Vanilla MA Plot ****************************************************************
-maplot = function (v1, v2, v12names, plotdata, yrange = NULL, plot2file = FALSE) {
+maplot = function (v1, v2, v12names, plotdata, yrange = NULL, plot2file = FALSE, plotIDOffset = 0) {
 #  v1, v2:  vectors of equal length to compare by ma plot
 #  v12names:  list of strings describing vectors v1 and v2
 #    v1, v2 string names; will appear on the plot!
@@ -61,8 +61,9 @@ maplot = function (v1, v2, v12names, plotdata, yrange = NULL, plot2file = FALSE)
 #  yrange:  if specified, sets the y-axis range
 #    Note:  fivenumber or quantile vector will be included in the y-axis label, so it will be clear if the plot has been limited.
 #  plot2file:  if true, plot to file as specified in plotdata
+#  plotIDOffset:  offset value for the plot ID... default to zero
 
-  plotID = 4
+  plotID = 4 + plotIDOffset
   plotDesc = sprintf('MA_%s.vs.%s', v12names$v1, v12names$v2) 
   if(plot2file) {
   png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
@@ -128,7 +129,7 @@ hex.maplot = function (comp1, comp2, c12names, yrange = FALSE, plot2file = FALSE
 }
 
 # ******** Summary ****************************************************************
-summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, colorspec, plotdata, plot2file = FALSE, histbins = 40, expand.2D = 5, filesep="/") {
+summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, colorspec, plotdata, plot2file = FALSE, histbins = 40, expand.2D = 5, filesep="/", plotIDOffset = 0) {
 # rawmat is the matrix of raw data. Should have any background addition and
 #  be scaled according to normalized data
 # normmat is a matrix of experimental data in columns (with headers!)
@@ -144,6 +145,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
 #  plottitle:  title for all plots
 # histbins:  default # of bins for density plot
 # expand.2D = multiplier of histbins for 2D histogram
+# plotIDOffset:  a number to offset the plotID values... Can be used to organize
 # Consider adding color! Maybe shade by experimental group
 
   # imports
@@ -164,7 +166,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
   u.col.classes = unique(colvec) 
 
 # Boxplot of all data
-  plotID = 1
+  plotID = 1 + plotIDOffset
   plotDesc = 'boxplot'
   if(plot2file) {
   png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
@@ -174,7 +176,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
   if(plot2file) dev.off()
 
 # Scatterplot of all data
-  plotID = 2
+  plotID = 2 + plotIDOffset
   plotDesc = 'scatter'
   if(plot2file) {
     png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
@@ -192,7 +194,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
   if(plot2file) dev.off()
 
 # Density plot
-  plotID = 3
+  plotID = 3 + plotIDOffset
   plotDesc = 'density'
   if(plot2file) {
     png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
@@ -218,7 +220,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
   if(plot2file) dev.off()
 
 # SD plot
-  plotID = 7
+  plotID = 7 + plotIDOffset
   plotDesc = 'spread'
   if(plot2file) {
     png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
@@ -290,7 +292,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
   # plot
     plot(x=0,y=0,type="n",xlim=xl,ylim=yl,
          xlab=paste(mynorm,' normalized intensity'),
-         ylab='Standard deviation per gene',
+         ylab='Standard deviation',
          main = plotdata$plottitle)
 
   points(xplt[myx[randx]],yplt[myy[randx]],col=myc[randx],pch=15,cex=.6)
@@ -415,9 +417,9 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
 
 
 # ******** Scatter ****************************************************************
-scatterplot = function (normmat, attribs, plotdata, plot2file = FALSE) {
+scatterplot = function (normmat, attribs, plotdata, plot2file = FALSE, plotIDOffset = 0) {
 # This is intended to show individual replicates vs. average of experimental group
-# It will create one plot per column, and a average vs average
+# It will create one plot per column, and an average vs average
 # normmat is a matrix of experimental data in columns (with headers!)
 # attribs is a vector of experimental categories (one entry per column in normmat)
 # plotdata is a list of info relevant to labeling and saving the plot
@@ -426,7 +428,7 @@ scatterplot = function (normmat, attribs, plotdata, plot2file = FALSE) {
 #  plottitle:  title for all plots
 #
 
-  plotID = '2a'
+  plotID = ifelse(plotIDOffset == 0, '2a', paste0(plotIDOffset + 2, "a"))
   plotlims = c(floor(min(normmat)), ceiling(max(normmat)))
   expts = unique(attribs)
   n.expts = length(expts)
