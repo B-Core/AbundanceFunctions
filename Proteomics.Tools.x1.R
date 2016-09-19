@@ -4,13 +4,16 @@
 # rqd.libraries    --- A tidy list of the libraries used for proteomics analysis.
 # maplot           --- A plain vanilla MA plot with loess fit line
 # hex.maplot       --- A 2D MA plot. Needs refinement.
-# summary.plots    --- Creates box, scatter, and density plots
+# summary.plots    --- Creates box, scatter, density and SD/mean plots
 # qc.clusters      --- Plot heatmap and MDS - cuts data with small SD
 #                  --- Needs some generalization for multiple variables
+# qcQvalue         --- Plot p-value histogram, q-value auto-qc & MDS w q-cut
+# designRatios     --- Calculate ratios based on expt design, MDS plot & heatmap
 # scatterplot      --- X-Y Scatter plot
-# mds.plot         --- MDS plot
+# makeMDSplot      --- MDS plot child function called by qc functions
+# makeHeatmap      --- heatmap child function called by qc & design functions
 #
-# Author: Theresa Lusardi
+# Authors: Theresa Lusardi and Julja Burchard
 # Started - July 2016
 #####################################################################################################
 
@@ -345,6 +348,7 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
     plotdata$plotdir = paste0(plotdata$plotdir,filesep)
   }
 
+
   plotID = 5
   plotDesc = 'Heatmap' 
   if(plot2file) {
@@ -354,67 +358,335 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
 
   # Center data
   if(center == 'norm') {
-    normmat = sweep(normmat, 1, rowMeans(normmat,na.rm=T), '-')
-    message(sprintf('centered on norm, max=%1.3f, min=%1.3f', max(normmat,na.rm=T), min(normmat,na.rm=T)))
-  } else normmat = sweep(normmat, 1, rowMeans(rawmat,na.rm=T), '-')
-  
-  # calculate the color limits 
-  # color limit for plotting: clim.pct percentile of data, divided in half (~dist to med)
-  # try two different normalization methods...
-#   c.lim1 = max(abs(quantile(normmat, c(1-clim.pct, clim.pct))))
-  # inner limit
-  c.lim = quantile( sapply(1:nrow(normmat),
-                           function(x){ diff(range( normmat[x,], na.rm=T )) }),
-                    probs=clim.pct, na.rm=T)/2
-  # outer limit
-  c.lim0 = max(abs(normmat),na.rm=T)
+    ratiomat = sweep(normmat, 1, rowMeans(normmat,na.rm=T), '-')
+    message(sprintf('centered on norm, max=%1.3f, min=%1.3f', max(ratiomat,na.rm=T), min(ratiomat,na.rm=T)))
+  } else ratiomat = sweep(normmat, 1, rowMeans(rawmat,na.rm=T), '-')
   
   # Determine a lower threshold for data of interest
-  # If there is too much non-changing data, the histogram calculation will stall
-  mySD = sd(normmat, na.rm = T)
-  mymask = sapply(1:nrow(normmat),function(x){sd(normmat[x,],na.rm=T)}) > mySD
+  # If there is too much non-changing data, the cluster calculation will stall
+  # As this is a QC plot, limit to genes more variable than average
+  mySD = sd(ratiomat, na.rm = T)
+  mymask = sapply(1:nrow(ratiomat),function(x){sd(ratiomat[x,],na.rm=T)}) > mySD
   message(sprintf('c.lim = %1.3f, mymask rows = %s, !mymask rows = %s',
                    c.lim, sum(mymask), sum(!mymask)))
 
-  # Plot
-  aheatmap(normmat[mymask,], color="-PiYG:64",
-           breaks=c(-c.lim0, seq(from=-c.lim, to=c.lim, by=c.lim/31), c.lim0),
-           annCol=attribs, labCol=colnames(normmat),
-           main=plotdata$plottitle)
+  makeHeatmap(normmat=normmat[mymask,], ratiomat=ratiomat[mymask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct)
 
   if(plot2file) dev.off()
+
 
   plotID = 6
   plotDesc = 'MDS' 
   if(plot2file) {
   png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
-      width=4.5,height=4.9,units="in",res=300)
-  }
-  # factor to plot
-  samp.classes = attribs[[oneclass]]
-  # set up plotting colors
-  u.samp.classes = unique(samp.classes)
-  colmap = colorRampPalette(colorspec)
-  colvec = colmap(length(u.samp.classes))
-  # map colors back to samples
-  colvec = colvec[as.numeric(as.factor(samp.classes))]
-  # R doesn't resort on unique: saves order of occurrence
-  u.col.classes = unique(colvec) 
+      width=5.4,height=5.4,units="in",res=300)
 
-  # plot MDS and capture numeric results
-  obj_MDS = plotMDS(normmat, col=colvec, labels=colnames(normmat),
-          top=sum(mymask), main=plotdata$plottitle, cex=.6 )
-
-  # add legend
-  axl = par("usr") # c(x1,x2,y1,y2) == extremes of user coords in plot region
-  par(xpd=NA) # allow plotting anywhere on device
-  legend(x=axl[2]-.025*abs(diff(axl[1:2])), y=axl[4], legend=u.samp.classes, col=u.col.classes, pch=16, cex=.6)
+  obj_MDS = makeMDSplot(normmat=normmat, attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, ngenes=sum(mymask))
 
   if(plot2file) dev.off()
+
+  }
 }  # end of qc.clusters function
 
 
-# ******** Scatter ****************************************************************
+# ******** Q-value QC **********************************************************
+qcQvalues = function (normmat, pvalue_v, obj_qvalue, qcut, attribs, oneclass, 
+                      plotdata, colorspec, histbins=40, plot2file = FALSE, 
+                      filesep='/') {
+# This is a check on the proper running of q-value analysis
+# plots:
+#  1) histogram of p-values input to q-value. 
+#     these must NOT have a right peak or qvalue() will return spurious results
+#  2) qvalue's default plots, with full qvalue range c(0,1) plotted
+#     these should show an even descent to pi0 in the top left tuning plot,
+#     and a slow or steep rise in q-values in remaining plots depending on 
+#     resolving power of data
+#  3) MDS plot restricted by q-value cut.
+#  normmat:  data matrix of bias-reduced data. nrow(normmat)==length(pvalue_v) 
+#  pvalue_v: vector of p-values previously used as input to qvalue()
+#  obj_qvalue: S3 object of qvalue class (a list!) returned by qvalue()
+#  qcut: either a number between 0 and 1 used as an upper qvalue limit for MDS,
+#     OR a number >1, assumed to be the top n qvalues to use in MDS
+#  attribs:  list of sample classifications to be tracked in clustering
+#     each list element contains a string vector with one label per sample
+#  oneclass: string name of attribs element to be used in MDS plot
+#  plotdata is a list of info relevant to labeling and saving the plot
+#     plotdir:  plot destination directory
+#     plotbase:  base filename for the plot. Suggest: bias reduction method
+#     plottitle:  title for all plots
+#  colorspec is a vector of color specifiers for colorRampPalette  
+
+  # constants
+  fudgefac = 2 # fold excess permitted in rows recovered by top n qcut when specified as a quantile of qvalues
+
+  # imports
+  require(qvalue)
+  require(limma)
+
+  # argument tests
+  if( !exists("qvalues", obj_qvalue) ){
+    stop("qvalue object does not contain qvalues element")
+  }
+  if( nrow(normmat) != length(pvalue_v) | nrow(normmat) != length(obj_qvalue$qvalues) ){
+    stop("Data matrix has",nrow(normmat),"rows, p-value vector has",length(pvalue_v),"elements and qvalue object has",length(obj_qvalue$qvalues),"q-values, but all must be the same size")
+  }
+
+  # test plotdir for filesep; add if absent
+  if( !grepl(paste0(filesep,'$'),plotdata$plotdir) ){
+    plotdata$plotdir = paste0(plotdata$plotdir,filesep)
+  }
+
+  plotID = '8p'
+  plotDesc = 'p.value_histogram' 
+  if(plot2file) {
+  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
+      width=5,height=5.4,units="in",res=300)
+  }
+  hist(pvalue_v, nclass=histbins, main=plotdata$plottitle)
+
+  if(plot2file) dev.off()
+
+
+  plotID = '8q'
+  plotDesc = 'q.value_QC.plot.array' 
+  if(plot2file) {
+  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
+      width=7,height=5.4,units="in",res=300)
+  }
+  plot(obj_qvalue, rng=c(0,1), cex.axis=.6)
+
+  if(plot2file) dev.off()
+  
+
+  plotID = '6q0'
+  plotDesc = 'MDS_q.value_QC' 
+  if(plot2file) {
+  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
+      width=5.4,height=5.4,units="in",res=300)
+  }
+
+  # data to plot
+  if( !is.numeric(qcut) | qcut<0 | qcut>length(obj_qvalue$qvalues) ){
+    stop(paste(qcut,"must be a number > 0 and <= nrow(data)"))
+  } else if( qcut <=1 ) { # assume this is a q-value on which to cut
+    mymask = obj_qvalue$qvalues < qcut & !is.na(obj_qvalue$qvalues)
+    titlestr= paste("qvalue <",signif(qcut,2) )
+  } else { # assume this is a number of top genes by qvalue on which to cut
+    q_quan = quantile(obj_qvalue$qvalues, probs=qcut/length(obj_qvalue$qvalues), na.rm=T)
+    mymask = obj_qvalue$qvalues <= q_quan & !is.na(obj_qvalue$qvalues)
+    titlestr= paste("top",sum(mymask),"q-values <=",signif(q_quan,3) )
+    # test for lack of resolution in q-values; if so use p-values instead
+    if( sum(mymask)>(qcut*fudgefac) ) { #identical qvalues at cut increase sum
+      p_quan = quantile( pvalue_v, probs=qcut/length(pvalue_v), na.rm=T)  
+      mymask = pvalue_v <= p_quan & !is.na(obj_qvalue$qvalues)
+      titlestr= paste("top",sum(mymask),"p-values <=",signif(p_quan,3) )
+    }
+  }
+
+  obj_MDS = makeMDSplot(normmat=normmat[mymask,], attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, subtitle=titlestr, ngenes=sum(mymask))
+
+  if(plot2file) dev.off()
+
+  invisible( list(rowmask=mymask,obj_MDS=obj_MDS) )
+
+} # end of qcQvalue()
+
+
+# ******** Ratios by experimental design ***************************************
+designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
+                         q_list=NULL, cut_ls=NULL, 
+                         clim.pct=0.99, clim_fix=NULL, 
+                         plot2file = FALSE, filesep='/') {
+# This is intended to display differential expression after feature selection
+# It will create a heatmap of ratios based on experimental design
+# normmat: matrix of experimental data in columns (with headers!)
+# attribs: list of sample classifications to be tracked in clustering
+#   each list element contains a string vector with one label per sample
+# ratioby_ls: list of elements of attribs to use for ratio construction
+#   element names are names of elements of attribs
+#   list element containing character vector of length 1 declares this factor 
+#     to be the one used for ratio formation and sets the baseline 
+#     to the given factor level
+#   list element containing character vector of all unique values of a factor 
+#     instructs to split data by this factor before ratioing
+#   example: ratioby_ls = list(genotype='WT', gene=unique(annCol$gene))
+# q_list: S3 object of qvalue class (a list!) returned by qvalue()
+#   OR a list of such objects, OR NULL if no q-value cuts are intended
+# cut_ls: list of pre-specified elements used to select features 
+#   include_ID = vector of identifiers in rownames(normmat) to always show
+#   qcut: either a number between 0 and 1 used as an upper qvalue limit for MDS,
+#     OR a number >1, assumed to be the top n qvalues to use in heatmap
+#     note that all qvalues <= nth qvalue will be included 
+#     (may increase effective n, especially with borderline qcut)
+#   q_combine = "OR" or "AND" # union or intersection of multiple qvalue tests
+#   q_dir: logical of length(q_list)
+#     TRUE: select features with q < qcut for i'th qvalue object
+#     FALSE: select features with q > qcut
+#   rcut_fold = linear scale number for min best abs ratio required
+#   icut_fold = linear scale number for mean fold above min(normmat) required
+#   => include elements to execute cuts; omit to skip
+# plotdata: list of info relevant to labeling and saving the plot
+#   plotdir:  plot destination directory
+#   plotbase:  base filename for the plot
+#   plottitle:  title for all plots
+#  clim.pct:  0:1 - fraction of data to limit max color
+#  clim_fix: if set, max abs ratio to show; data>clim_fix are shown as clim_fix
+
+  require(NMF)
+
+  # arguments
+
+  # q-value cuts
+  if( !exists("combine", where=cut_ls) ){
+    cut_ls$combine = "OR"
+  }
+  if( !exists("qcut", where=cut_ls) ){
+    qflag = "no"
+  } else if( !is.numeric(cut_ls$qcut) | cut_ls$qcut<=0 | cut_ls$qcut>nrow(normmat) ){
+    stop(paste(cut_ls$qcut,"must be a number > 0 and <= nrow(data)"))
+  } else if( cut_ls$qcut <1 ) { # assume this is a qvalue cut
+    qflag = "qval"
+  } else { # assume this is a number of top genes by qvalue on which to cut
+    qflag = "qtop"
+  }
+
+  # test plotdir for filesep; add if absent
+  if( !grepl(paste0(filesep,'$'),plotdata$plotdir) ){
+    plotdata$plotdir = paste0(plotdata$plotdir,filesep)
+  }
+
+  
+  # calculate ratios based on experimental design
+
+  # parse design in attribs and ratioby_ls
+  splitby_ls = NULL; refmk = logical(length(attribs[[1]])); refmk[]= TRUE
+  oneclass = names(ratioby_ls) # may be more than one! pick ref elem below
+  for( fac in names(ratioby_ls) ){
+    if( length(ratioby_ls[[fac]]) < length(unique(attribs[[fac]])) ){
+      # this is the level to use as baseline/reference
+      refmk = refmk & attribs[[fac]] == ratioby_ls[[fac]]
+      oneclass = fac # MDS plot will be colored by this
+    } else {
+      # this is a factor by which to divide the data before ratioing
+      splitby_ls = c(splitby_ls,attribs[fac])
+    }
+  }
+
+  # create composite split factor if indicated
+  splitfac_v = NULL
+  if(!is.null(splitby_ls) ){
+    splitfac_v = do.call(paste,c(splitby_ls,sep='.'))
+    Usplitfac_v = unique(splitfac_v)
+  }
+
+  # create list of ratio matrices based on experimental design
+  ratio_lsmat = NULL
+  if( !is.null(splitby_ls) ){
+    ratio_lsmat = vector(mode='list',length=length(Usplitfac_v))
+    names(ratio_lsmat) = Usplitfac_v
+    for( fac in Usplitfac_v ) {
+      ratio_lsmat[[fac]] = normmat
+      ratio_lsmat[[fac]] = ratio_lsmat[[fac]] - rowMeans(ratio_lsmat[[fac]][,refmk & splitfac_v==fac],na.rm=T)
+      ratio_lsmat[[fac]] = ratio_lsmat[[fac]][,splitfac_v==fac]
+    }
+  } else {
+    ratio_lsmat[[1]] = normmat
+    ratio_lsmat[[1]] = ratio_lsmat[[1]] - rowMeans(ratio_lsmat[[1]][,refmk],na.rm=T)
+  }
+  # combine ratios to make one matrix (each column represented once)
+  ratiomat = do.call(cbind,ratio_lsmat) # do.call reqd for cbind on list
+
+  # mask for rows
+  rowmask = logical(nrow(ratiomat)); rowmask[] = TRUE
+  
+  # optional qvalue mask
+  if( !is.null(q_list) ){
+    if( any(grepl("OR",cut_ls$combine,ignore.case=TRUE)) ){  rowmask[] = FALSE }
+    if( any(grepl("qvalues",names(q_list) )) ){ # one qvalue object supplied
+      # rearrange for easier looping
+      tmp = q_list; q_list=NULL; q_list[[1]] = tmp
+    }
+    for( i in 1:length(q_list) ){
+      if( !any(grepl("qvalues",names(q_list[[i]]) )) ){
+        stop("No qvalues in q_list element",i)
+      }
+      # set q-value cut for this qvalue object
+      if( qflag=="qtop" ){
+        # find q-value cut for given top n features
+        qcut = quantile(q_list[[i]]$qvalues, probs=cut_ls$qcut/length(q_list[[i]]$qvalues), na.rm=T)
+      } else if( qflag=="qval" ){
+        qcut = cut_ls$qcut
+      }
+      if( exists("qcut") ){ # skip q-value masking if no cut was given
+        q_include = FALSE
+        if( !exists("q_dir", where=cut_ls) ) { q_include =TRUE  
+        } else if( cut_ls$q_dir[i] ){ q_include=TRUE }
+        if( q_include ){ 
+          # include significant q-values
+          if( any(grepl("OR",cut_ls$combine,ignore.case=TRUE)) ){
+            rowmask = rowmask | q_list[[i]]$qvalues < qcut
+          } else {
+            rowmask = rowmask & q_list[[i]]$qvalues < qcut
+          }
+        } else { # avoid the significant qvalues
+          # this is set to AND on assumption we will want to remove
+          #  nuisance significance, not to include all non-significant nuisances
+          rowmask = rowmask & q_list[[i]]$qvalues > qcut
+        }
+      }
+    }
+  }
+
+  # optional non-qvalue masks
+  # include features
+  if( exists("include_ID", where=cut_ls) ){
+    rowmask = rowmask | rownames(ratiomat) %in% cut_ls$include_ID
+  }
+  # exclude ratios
+  if( exists("rcut_fold", where=cut_ls) ){
+    rowmask = rowmask & apply(X=abs(ratiomat), MARGIN=1, FUN=max, na.rm=T) > log2(cut_ls$rcut_fold)
+  }
+  # exclude abundances
+  if( exists("icut_fold", where=cut_ls) ){
+    rowmask = rowmask & apply(X=normmat, MARGIN=1, FUN=mean, na.rm=T) > ( log2(cut_ls$icut_fold) + min(normmat,na.rm=T) )
+  }
+
+  # report selection size
+  message(sprintf('selected rows = %s, !selected rows = %s',
+                   sum(rowmask), sum(!rowmask)))
+
+  plotID = '5q1'
+  plotDesc = 'Heatmap_selected' 
+  if(plot2file) {
+  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
+      width=5,height=7,units="in",res=300)
+  }
+
+  # plot heatmap
+  makeHeatmap(normmat=normmat[rowmask,], ratiomat=ratiomat[rowmask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct, clim_fix=clim_fix)
+  
+  if(plot2file) dev.off()
+
+
+  plotID = '6q1'
+  plotDesc = 'MDS_selected' 
+  if(plot2file) {
+  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
+      width=5.4,height=5.4,units="in",res=300)
+  }
+
+  # plot MDS
+  obj_MDS = makeMDSplot(normmat=ratiomat[rowmask,], attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, ngenes=sum(rowmask))
+
+  if(plot2file) dev.off()
+
+
+  # return processed data
+  invisible( list(ratiomat=ratiomat, rowmask=rowmask, obj_MDS=obj_MDS) )
+} # end designRatios
+
+
+# ******** Scatter *************************************************************
 scatterplot = function (normmat, attribs, plotdata, plot2file = FALSE) {
 # This is intended to show individual replicates vs. average of experimental group
 # It will create one plot per column, and a average vs average
@@ -491,7 +763,96 @@ scatterplot = function (normmat, attribs, plotdata, plot2file = FALSE) {
 }  # end of scatterplot function
 
 
+##### **** Child functions that perform subtasks **************************#####
 
+
+makeMDSplot = function (normmat, attribs, oneclass, colorspec, plottitle, 
+                        subtitle=NULL, ngenes=NULL) {
+# This function considers only a single clustering variable in coloring MDS plot... Will need to be gneralized
+# Uses the matrix values to cluster the data
+#  normmat:  data matrix, with unique & informative colnames 
+#  attribs:  list of sample classifications to be tracked in clustering
+#    each list element contains a string vector with one label per sample
+#  oneclass: string name of attribs element to be used in MDS plot
+#  colorspec is a vector of color specifiers for colorRampPalette  
+#    colors are generated per sample by their clustering variable values
+#  plottitle:  title for all plots
+#  subtitle: optional subtitle to add below title on this plot
+#  ngenes: number of "top" genes for plotMDS to select for distance calculation
+
+  # imports
+  require(limma)
+
+  # factor to plot
+  samp.classes = attribs[[oneclass]]
+  # set up plotting colors
+  u.samp.classes = unique(samp.classes)
+  colmap = colorRampPalette(colorspec)
+  colvec = colmap(length(u.samp.classes))
+  # map colors back to samples
+  colvec = colvec[as.numeric(as.factor(samp.classes))]
+  # R doesn't re-sort on unique: saves order of occurrence
+  u.col.classes = unique(colvec) 
+
+  # number of "top" genes used for sample-sample distance calculation
+  if( is.null(ngenes) ) { ngenes = nrow(normmat) }
+
+  # plot MDS and capture numeric results
+  par( mar=c(5,4,4,4)+0.1 ) #default mar=c(5,4,4,2)+0.1; margin in lines
+  obj_MDS = plotMDS(normmat, col=colvec, labels=colnames(normmat),
+          top=ngenes, main=plottitle, cex=.6 )
+  if( !is.null(subtitle) ){ mtext(subtitle, cex=.8) }
+
+  # add legend
+  axl = par("usr") # c(x1,x2,y1,y2) == extremes of user coords in plot region
+  # allow plotting anywhere on device, and widen right margin
+  par(xpd=NA) 
+  legend(x=axl[2]-.025*abs(diff(axl[1:2])), y=axl[4], legend=u.samp.classes, col=u.col.classes, pch=16, cex=.6)
+
+  return(obj_MDS)
+
+} # end makeMDSplot
+
+
+makeHeatmap = function (normmat, ratiomat, attribs, plottitle, clim.pct=.99,
+                        clim_fix=NULL, colorbrew="-PiYG:64", cexRow=0.00001 ) {
+# This function makes a heatmap of ratio data, displaying experimental design values as tracks
+# Uses the matrix values to cluster the data
+#  normmat:  abundance data matrix, with unique & informative colnames 
+#  ratiomat:  ratio data matrix, derived from normmat
+#    must have same row and column order!!
+#  attribs:  list of sample classifications to be tracked in clustering
+#    each list element contains a string vector with one label per sample
+#  colorbrew is a colorBrewer string specifying a heatmap color scale 
+#    colors are generated per sample by their clustering variable values
+#  plottitle:  title for all plots
+#  clim.pct:  0:1 - fraction of data to limit max color
+#  clim_fix: if set, max abs ratio to show; data>clim_fix are shown as clim_fix
+#  cexRow: rowlabel size for heatmap, set to ~invisible by default
+
+  # imports
+  require(NMF)
+
+  # calculate the color limits 
+  # color limit for plotting: clim.pct percentile of data, divided in half (~dist to med) gets color scale; values outside this range get max color
+  # inner limit
+  c.lim = quantile( sapply(1:nrow(normmat),
+                           function(x){ diff(range( normmat[x,], na.rm=T )) }),
+                    probs=clim.pct, na.rm=T)/2
+  # outer limit
+  if( !is.null(clim_fix) ){
+    ratiomat[ratiomat>clim_fix] = clim_fix
+    ratiomat[ratiomat<=-clim_fix] = -clim_fix
+  }
+  c.lim0 = max(abs(ratiomat),na.rm=T)
+  
+  # Plot
+  aheatmap(ratiomat, color=colorbrew, cexRow=cexRow, 
+           breaks=c(-c.lim0, seq(from=-c.lim, to=c.lim, by=c.lim/31), c.lim0),
+           annCol=attribs, labCol=colnames(normmat),
+           main=plotdata$plottitle)
+
+} # end makeHeatmap
 
 
 
