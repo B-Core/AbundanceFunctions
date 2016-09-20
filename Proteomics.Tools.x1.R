@@ -507,7 +507,8 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
 designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
                          q_list=NULL, cut_ls=NULL, 
                          clim.pct=0.99, clim_fix=NULL, 
-                         plot2file = FALSE, filesep='/') {
+                         plot2file = FALSE, filesep='/', 
+                         cexRow=0.00001, png_res=300) {
 # This is intended to display differential expression after feature selection
 # It will create a heatmap of ratios based on experimental design
 # normmat: matrix of experimental data in columns (with headers!)
@@ -542,6 +543,8 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
 #   plottitle:  title for all plots
 #  clim.pct:  0:1 - fraction of data to limit max color
 #  clim_fix: if set, max abs ratio to show; data>clim_fix are shown as clim_fix
+#  cexRow: rowlabel size for heatmap, set to ~invisible by default
+#  png_res: resolution of saved png files in dpi; default 300
 
   require(NMF)
 
@@ -669,12 +672,11 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
   plotID = '5q1'
   plotDesc = 'Heatmap_selected' 
   if(plot2file) {
-  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
-      width=5,height=7,units="in",res=300)
+  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc), width=5,height=7,units="in",res=png_res)
   }
 
   # plot heatmap
-  makeHeatmap(normmat=normmat[rowmask,], ratiomat=ratiomat[rowmask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct, clim_fix=clim_fix)
+  makeHeatmap(normmat=normmat[rowmask,], ratiomat=ratiomat[rowmask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct, clim_fix=clim_fix, cexRow=cexRow)
   
   if(plot2file) dev.off()
 
@@ -682,8 +684,7 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
   plotID = '6q1'
   plotDesc = 'MDS_selected' 
   if(plot2file) {
-  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
-      width=5.4,height=5.4,units="in",res=300)
+  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc), width=5.4,height=5.4,units="in",res=png_res)
   }
 
   # plot MDS
@@ -825,8 +826,9 @@ makeMDSplot = function (normmat, attribs, oneclass, colorspec, plottitle,
 } # end makeMDSplot
 
 
-makeHeatmap = function (normmat, ratiomat, attribs, plottitle, clim.pct=.99,
-                        clim_fix=NULL, colorbrew="-PiYG:64", cexRow=0.00001 ) {
+makeHeatmap = function (normmat, ratiomat, attribs, plottitle, 
+                        clim.pct=.99, clim_fix=NULL, colorbrew="-PiYG:64", 
+                        cexRow=0.00001 ) {
 # This function makes a heatmap of ratio data, displaying experimental design values as tracks
 # Uses the matrix values to cluster the data
 #  normmat:  abundance data matrix, with unique & informative colnames 
