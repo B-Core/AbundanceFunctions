@@ -392,7 +392,7 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
 
 
 # ******** Q-value QC **********************************************************
-qcQvalues = function (normmat, pvalue_v, obj_qvalue, qcut, attribs, oneclass, 
+qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass, 
                       plotdata, colorspec, histbins=40, plot2file = FALSE, 
                       filesep='/') {
 # This is a check on the proper running of q-value analysis
@@ -404,7 +404,7 @@ qcQvalues = function (normmat, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
 #     and a slow or steep rise in q-values in remaining plots depending on 
 #     resolving power of data
 #  3) MDS plot restricted by q-value cut.
-#  normmat:  data matrix of bias-reduced data. nrow(normmat)==length(pvalue_v) 
+#  norm_x:  abundance data, vector or matrix. nrow(normmat)==length(pvalue_v) 
 #  pvalue_v: vector of p-values previously used as input to qvalue()
 #  obj_qvalue: S3 object of qvalue class (a list!) returned by qvalue()
 #  qcut: either a number between 0 and 1 used as an upper qvalue limit for MDS,
@@ -426,11 +426,15 @@ qcQvalues = function (normmat, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
   require(limma)
 
   # argument tests
+  if( is.null(dim(norm_x)) ){ # not matrix
+    norm_len = length(norm_x)
+  } else { norm_len = nrow(norm_x) 
+  }
   if( !exists("qvalues", obj_qvalue) ){
     stop("qvalue object does not contain qvalues element")
   }
-  if( nrow(normmat) != length(pvalue_v) | nrow(normmat) != length(obj_qvalue$qvalues) ){
-    stop("Data matrix has",nrow(normmat),"rows, p-value vector has",length(pvalue_v),"elements and qvalue object has",length(obj_qvalue$qvalues),"q-values, but all must be the same size")
+  if( norm_len != length(pvalue_v) | norm_len != length(obj_qvalue$qvalues) ){
+    stop("Data matrix has",norm_len,"rows, p-value vector has",length(pvalue_v),"elements and qvalue object has",length(obj_qvalue$qvalues),"q-values, but all must be the same size")
   }
 
   # test plotdir for filesep; add if absent
@@ -460,34 +464,39 @@ qcQvalues = function (normmat, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
   if(plot2file) dev.off()
   
 
-  plotID = '6q0'
-  plotDesc = 'MDS_q.value_QC' 
-  if(plot2file) {
-  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
-      width=5.4,height=5.4,units="in",res=300)
-  }
-
-  # data to plot
-  if( !is.numeric(qcut) | qcut<0 | qcut>length(obj_qvalue$qvalues) ){
-    stop(paste(qcut,"must be a number > 0 and <= nrow(data)"))
-  } else if( qcut <=1 ) { # assume this is a q-value on which to cut
-    mymask = obj_qvalue$qvalues < qcut & !is.na(obj_qvalue$qvalues)
-    titlestr= paste("qvalue <",signif(qcut,2) )
-  } else { # assume this is a number of top genes by qvalue on which to cut
-    q_quan = quantile(obj_qvalue$qvalues, probs=qcut/length(obj_qvalue$qvalues), na.rm=T)
-    mymask = obj_qvalue$qvalues <= q_quan & !is.na(obj_qvalue$qvalues)
-    titlestr= paste("top",sum(mymask),"q-values <=",signif(q_quan,3) )
-    # test for lack of resolution in q-values; if so use p-values instead
-    if( sum(mymask)>(qcut*fudgefac) ) { #identical qvalues at cut increase sum
-      p_quan = quantile( pvalue_v, probs=qcut/length(pvalue_v), na.rm=T)  
-      mymask = pvalue_v <= p_quan & !is.na(obj_qvalue$qvalues)
-      titlestr= paste("top",sum(mymask),"p-values <=",signif(p_quan,3) )
+  # make first-draft MDS plot if abundance data are a matrix 
+  #  (multiple samples to compare)
+  obj_MDS = NULL
+  if( !is.null(dim(norm_x)) ){
+    plotID = '6q0'
+    plotDesc = 'MDS_q.value_QC' 
+    if(plot2file) {
+    png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
+        width=5.4,height=5.4,units="in",res=300)
     }
+
+    # data to plot
+    if( !is.numeric(qcut) | qcut<0 | qcut>length(obj_qvalue$qvalues) ){
+      stop(paste(qcut,"must be a number > 0 and <= nrow(data)"))
+    } else if( qcut <=1 ) { # assume this is a q-value on which to cut
+      mymask = obj_qvalue$qvalues < qcut & !is.na(obj_qvalue$qvalues)
+      titlestr= paste("qvalue <",signif(qcut,2) )
+    } else { # assume this is a number of top genes by qvalue on which to cut
+      q_quan = quantile(obj_qvalue$qvalues, probs=qcut/length(obj_qvalue$qvalues), na.rm=T)
+      mymask = obj_qvalue$qvalues <= q_quan & !is.na(obj_qvalue$qvalues)
+      titlestr= paste("top",sum(mymask),"q-values <=",signif(q_quan,3) )
+      # test for lack of resolution in q-values; if so use p-values instead
+      if( sum(mymask)>(qcut*fudgefac) ) { #identical qvalues at cut increase sum
+        p_quan = quantile( pvalue_v, probs=qcut/length(pvalue_v), na.rm=T)  
+        mymask = pvalue_v <= p_quan & !is.na(obj_qvalue$qvalues)
+        titlestr= paste("top",sum(mymask),"p-values <=",signif(p_quan,3) )
+      }
+    }
+
+    obj_MDS = makeMDSplot(normmat=normmat[mymask,], attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, subtitle=titlestr, ngenes=sum(mymask))
+
+    if(plot2file) dev.off()
   }
-
-  obj_MDS = makeMDSplot(normmat=normmat[mymask,], attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, subtitle=titlestr, ngenes=sum(mymask))
-
-  if(plot2file) dev.off()
 
   invisible( list(rowmask=mymask,obj_MDS=obj_MDS) )
 
