@@ -25,7 +25,7 @@ fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_m
       splits_mat = matrix(unlist(splits_ls), nrow=length(splits_ls), byrow = T)
       logRatioJoin_mat = cbind(splits_mat, logRatio_mat)
       colnames(logRatioJoin_mat) = c("Chr","Start","Stop", colnames(logRatio_mat))
-      hit_ls[[length(hit_ls)+1]] = list(logRatioJoin_mat=logRatioJoin_mat)
+      hit_ls[[length(hit_ls)+1]] = logRatioJoin_mat=logRatioJoin_mat
       names(hit_ls)[length(hit_ls)] = colnames(lg2Ratio_mat)[grep(ffID, colnames(lg2Ratio_mat))]
     }
   }
