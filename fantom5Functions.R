@@ -1,4 +1,4 @@
-fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_mat, x){
+fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_mat, x, onlyUpReg=T){
   #check the numeric section of the ff_mat for 0s,NAs???? and replace with col-wise non-zero min.
   numericPartOfFf_mat = data.matrix(ff_mat[,grep('tpm', colnames(ff_mat))])
   numericPartOfFf_mat = apply(numericPartOfFf_mat, 2, function(x) as.numeric(x))
@@ -14,10 +14,18 @@ fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_m
   #search for those rows with >abs(x) fc for one of any columns containing ids in ffID_v and return those log ratios, along with the chr, start, and stop
   hit_ls = list()
   for (ffID in ffID_v){
-    HighExprsInColOfInterestLogic_v = abs(lg2Ratio_mat[,grep(ffID, colnames(lg2Ratio_mat))]) > abs(x)
+    if(onlyUpReg==TRUE){
+      HighExprsInColOfInterestLogic_v = lg2Ratio_mat[,grep(ffID, colnames(lg2Ratio_mat))] > x
+    }else{
+      HighExprsInColOfInterestLogic_v = abs(lg2Ratio_mat[,grep(ffID, colnames(lg2Ratio_mat))]) > abs(x)
+    }
     if(sum(HighExprsInColOfInterestLogic_v, na.rm=T)>0){
-      logRatio_mat = lg2Ratio_mat[HighExprsInColOfInterestLogic_v,grep(ffID, colnames(lg2Ratio_mat))]
-      hit_ls[[length(hit_ls)+1]] = list(logRatio_mat=logRatio_mat, positions = unlist(strsplit(ff_mat[HighExprsInColOfInterestLogic_v,1],':|\\.+|,'))[1:3])
+      logRatio_mat = lg2Ratio_mat[HighExprsInColOfInterestLogic_v,grep(ffID, colnames(lg2Ratio_mat)),drop=F]
+      splits_ls = lapply(ff_mat[HighExprsInColOfInterestLogic_v,1,drop=F], function(x) unlist(strsplit(x,':|\\.+|,'))[1:3])
+      splits_mat = matrix(unlist(splits_ls), nrow=length(splits_ls), byrow = T)
+      logRatioJoin_mat = cbind(splits_mat, logRatio_mat)
+      colnames(logRatioJoin_mat) = c("Chr","Start","Stop", colnames(logRatio_mat))
+      hit_ls[[length(hit_ls)+1]] = list(logRatioJoin_mat=logRatioJoin_mat)
       names(hit_ls)[length(hit_ls)] = colnames(lg2Ratio_mat)[grep(ffID, colnames(lg2Ratio_mat))]
     }
   }
