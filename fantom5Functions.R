@@ -1,3 +1,32 @@
+fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_mat, x){
+  #check the numeric section of the ff_mat for 0s,NAs???? and replace with col-wise non-zero min.
+  numericPartOfFf_mat = data.matrix(ff_mat[,grep('tpm', colnames(ff_mat))])
+  numericPartOfFf_mat = apply(numericPartOfFf_mat, 2, function(x) as.numeric(x))
+  numericPartOfFf_mat_test = apply(numericPartOfFf_mat, 2, function(x) replace(x,x %in% c(0), min(x[x>0]))) #include NA?
+  #min(numericPartOfFf_mat[numericPartOfFf_mat > 0],na.rm=T)
+  
+  #log2 transform the tpm count containing columns
+  lg2FF_mat = log2(numericPartOfFf_mat_test)#, na.omit=T)
+  #take rowmeans of the same columns
+  rMeans = rowMeans(lg2FF_mat,na.rm=T)
+  #find ratio to average for each of the columns (a difference in log2 scale)
+  lg2Ratio_mat= lg2FF_mat - rMeans #can I do this?
+  #search for those rows with >abs(x) fc for one of any columns containing ids in ffID_v and return those log ratios, along with the chr, start, and stop
+  hit_ls = list()
+  for (ffID in ffID_v){
+    HighExprsInColOfInterestLogic_v = abs(lg2Ratio_mat[,grep(ffID, colnames(lg2Ratio_mat))]) > abs(x)
+    if(sum(HighExprsInColOfInterestLogic_v, na.rm=T)>0){
+      logRatio_mat = lg2Ratio_mat[HighExprsInColOfInterestLogic_v,grep(ffID, colnames(lg2Ratio_mat))]
+      hit_ls[[length(hit_ls)+1]] = list(logRatio_mat=logRatio_mat, positions = unlist(strsplit(ff_mat[HighExprsInColOfInterestLogic_v,1],':|\\.+|,'))[1:3])
+      names(hit_ls)[length(hit_ls)] = colnames(lg2Ratio_mat)[grep(ffID, colnames(lg2Ratio_mat))]
+    }
+  }
+  return(hit_ls)
+  # logic_mat = lg2Ratio_mat > abs(x)
+  # logic_mat[,grep()]
+  #colsToKeep = grep(ffID_v[i], colnames(ff_mat))
+}
+
 getTopXCellTypes = function(ff_mat=NULL, chromoNum, range_v, x, colStrWithChromLocations_str){
   if(is.null(ff_mat)){
     require(data.table)
