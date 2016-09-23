@@ -369,8 +369,8 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
   # As this is a QC plot, limit to genes more variable than average
   mySD = sd(ratiomat, na.rm = T)
   mymask = sapply(1:nrow(ratiomat),function(x){sd(ratiomat[x,],na.rm=T)}) > mySD
-  message(sprintf('c.lim = %1.3f, mymask rows = %s, !mymask rows = %s',
-                   c.lim, sum(mymask), sum(!mymask)))
+  message(sprintf('mySD = %1.3f, mymask rows = %s, !mymask rows = %s',
+                   mySD, sum(mymask), sum(!mymask)))
 
   makeHeatmap(normmat=normmat[mymask,], ratiomat=ratiomat[mymask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct)
 
@@ -434,7 +434,7 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
     stop("qvalue object does not contain qvalues element")
   }
   if( norm_len != length(pvalue_v) | norm_len != length(obj_qvalue$qvalues) ){
-    stop("Data matrix has",norm_len,"rows, p-value vector has",length(pvalue_v),"elements and qvalue object has",length(obj_qvalue$qvalues),"q-values, but all must be the same size")
+    stop("Data matrix has ",norm_len," rows, p-value vector has ",length(pvalue_v)," elements and qvalue object has ",length(obj_qvalue$qvalues)," q-values, but all must be the same size")
   }
 
   # test plotdir for filesep; add if absent
@@ -477,7 +477,7 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
 
     # data to plot
     if( !is.numeric(qcut) | qcut<0 | qcut>length(obj_qvalue$qvalues) ){
-      stop(paste(qcut,"must be a number > 0 and <= nrow(data)"))
+      stop(paste(qcut," must be a number > 0 and <= nrow(data)"))
     } else if( qcut <=1 ) { # assume this is a q-value on which to cut
       mymask = obj_qvalue$qvalues < qcut & !is.na(obj_qvalue$qvalues)
       titlestr= paste("qvalue <",signif(qcut,2) )
@@ -551,8 +551,8 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
   # arguments
 
   # q-value cuts
-  if( !exists("combine", where=cut_ls) ){
-    cut_ls$combine = "OR"
+  if( !exists("q_combine", where=cut_ls) ){
+    cut_ls$q_combine = "OR"
   }
   if( !exists("qcut", where=cut_ls) ){
     qflag = "no"
@@ -615,14 +615,14 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
   
   # optional qvalue mask
   if( !is.null(q_list) ){
-    if( any(grepl("OR",cut_ls$combine,ignore.case=TRUE)) ){  rowmask[] = FALSE }
+    if( any(grepl("OR",cut_ls$q_combine,ignore.case=TRUE)) ){  rowmask[] = FALSE }
     if( any(grepl("qvalues",names(q_list) )) ){ # one qvalue object supplied
       # rearrange for easier looping
       tmp = q_list; q_list=NULL; q_list[[1]] = tmp
     }
     for( i in 1:length(q_list) ){
       if( !any(grepl("qvalues",names(q_list[[i]]) )) ){
-        stop("No qvalues in q_list element",i)
+        stop("No qvalues in q_list element ",i)
       }
       # set q-value cut for this qvalue object
       if( qflag=="qtop" ){
@@ -637,7 +637,7 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
         } else if( cut_ls$q_dir[i] ){ q_include=TRUE }
         if( q_include ){ 
           # include significant q-values
-          if( any(grepl("OR",cut_ls$combine,ignore.case=TRUE)) ){
+          if( any(grepl("OR",cut_ls$q_combine,ignore.case=TRUE)) ){
             rowmask = rowmask | q_list[[i]]$qvalues < qcut
           } else {
             rowmask = rowmask & q_list[[i]]$qvalues < qcut
