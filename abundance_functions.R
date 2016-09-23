@@ -905,8 +905,8 @@ Remove_mulimappers_and_return_probe_IDs = function(vec_of_probe_IDs, vec_of_prob
 }
 
 Summarize_by_some_custom_ID = function(normalized_matrix_with_rownames, probe_ID_vec, custom_ID_vec){
-  #WARNING: this function has not been convincingly troubleshooted and may contain at leas two potential issues: 1) the match statements may be reversed, although I don't think so and 2) hasn't been troubleshooted yet for what happens when nrow(normalized_matrix_with_rownames) is smaller than length(custom_ID_vec)
-  #summarizes a normalized matrix (that is in linear space). Maps the probe IDs to the matrix. Assumes that the probe_ID_vec is ALREADY MAPPED CORRECTLY to the custom_ID_vec (i.e., they should be the same length and correspond to one another).
+  #hasn't been troubleshooted yet for what happens when nrow(normalized_matrix_with_rownames) is smaller than length(custom_ID_vec)
+  #Maps the probe IDs to the matrix. Assumes that the probe_ID_vec is ALREADY MAPPED CORRECTLY to the custom_ID_vec (i.e., they should be the same length and correspond to one another).
   #normalized_matrix_with_rownames is a matrix of normalized data on a linear scale.
   #probe_ID_vec is a vector of strings of IDs of the same type/ilk as rownames(normalized_matrix_with_rownames)
   #custom_ID_vec is a vector of strings of IDs to which those probes/IDs from probe_ID_vec are to be collapsed/summarized
