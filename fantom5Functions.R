@@ -68,7 +68,7 @@ getTopXCellTypes = function(ff_mat=NULL, chromoNum, range_v, x, colStrWithChromL
         matches_ls[[length(matches_ls)+1]] = inRangeEntry_ls[[1]][1:x]
         names(matches_ls)[length(matches_ls)]=paste0(annotationParsed_ls[[locCounter]][2],":", annotationParsed_ls[[locCounter]][3],"-", annotationParsed_ls[[locCounter]][4])
         #return(inRangeEntry_ls[[1]][1:x])
-      }
+      }#else search nearby for closest tss
     }
     return(matches_ls)
   }
