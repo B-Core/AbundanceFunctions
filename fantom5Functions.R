@@ -23,8 +23,11 @@ fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_m
       logRatio_mat = lg2Ratio_mat[HighExprsInColOfInterestLogic_v,grep(ffID, colnames(lg2Ratio_mat)),drop=F]
       splits_ls = lapply(ff_mat[HighExprsInColOfInterestLogic_v,1,drop=F], function(x) unlist(strsplit(x,':|\\.+|,'))[1:3])
       splits_mat = matrix(unlist(splits_ls), nrow=length(splits_ls), byrow = T)
-      logRatioJoin_mat = cbind(splits_mat, logRatio_mat)
-      colnames(logRatioJoin_mat) = c("Chr","Start","Stop", colnames(logRatio_mat))
+      entrezIDsplit_ls = lapply(ff_mat[HighExprsInColOfInterestLogic_v, 5, drop=F], function(x) unlist(strsplit(x,':'))[2])
+      entrezID_mat = matrix(unlist(entrezIDsplit_ls), nrow=length(entrezIDsplit_ls), byrow = T)
+      description_mat = ff_mat[HighExprsInColOfInterestLogic_v, "description", drop=F]
+      logRatioJoin_mat = cbind(splits_mat,entrezID_mat,description_mat, logRatio_mat)
+      colnames(logRatioJoin_mat) = c("Chr","Start","Stop","EntrezID","Description", colnames(logRatio_mat))
       hit_ls[[length(hit_ls)+1]] = logRatioJoin_mat=logRatioJoin_mat
       names(hit_ls)[length(hit_ls)] = colnames(lg2Ratio_mat)[grep(ffID, colnames(lg2Ratio_mat))]
     }
