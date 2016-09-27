@@ -77,7 +77,7 @@ maplot = function (v1, v2, v12names, plotdata, yrange = NULL, plot2file = FALSE,
   A = 0.5*(v1 + v2)
   ranges = fivenum(M)
   if (!is.null(yrange)) {
-     ylimits = c(-max(abs(yrange)), max(abs(yrange)))
+     ylimits = c(-max(abs(yrange), na.rm = TRUE), max(abs(yrange), na.rm = TRUE))
     plot(A, M, pch = '.', ylim = ylimits)
   } else plot(A, M, pch = '.')
   title(xlab = 'A', ylab = 'M', main = plotdata$plottitle)
@@ -756,7 +756,7 @@ scatterplot = function (normmat, attribs, plotdata, plot2file = FALSE, plotIDOff
 #
 
   plotID = ifelse(plotIDOffset == 0, '2a', paste0(plotIDOffset + 2, "a"))
-  plotlims = c(floor(min(normmat)), ceiling(max(normmat)))
+  plotlims = c(floor(min(normmat, na.rm=TRUE)), ceiling(max(normmat, na.rm=TRUE)))
   expts = unique(attribs)
   n.expts = length(expts)
 
