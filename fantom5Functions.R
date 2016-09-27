@@ -1,3 +1,25 @@
+getSortedDTwithSplitOfFirstCol = function(ff_dt,nameOfCol1){
+  splits_ls = lapply(ff_dt[,get(nameOfCol1)], function(x) unlist(strsplit(x,':|\\.+|,'))[1:3])
+  splits_mat = matrix(unlist(splits_ls), nrow=length(splits_ls), byrow = T)
+  cNamesTmp = copy(names(ff_dt))
+  ff_dt[,chr := gsub('chr','',splits_mat[,1])]
+  ff_dt[,chr := gsub('X','25',ff_dt[,chr])]
+  ff_dt[,chr := gsub('Y','26',ff_dt[,chr])]
+  ff_dt[,Start := splits_mat[,2]]
+  ff_dt[,Stop := splits_mat[,3]]
+  #ff_dt[,get(nameOfCol1):=NULL]
+  #ff_dt[,1,with=F] =NULL
+  setcolorder(ff_dt,c("chr", "Start", "Stop",cNamesTmp))
+  #coerce chr, Start, and Stop into numeric (the idea being that things that turn into NAs *should* be NAs)
+  ff_dt$chr = as.numeric(ff_dt$chr)
+  ff_dt$Start = as.numeric(ff_dt$Start)
+  ff_dt$Stop = as.numeric(ff_dt$Stop)
+  ff_dt_return = ff_dt[order(chr,Start)]
+  ff_dt_return[,chr := gsub('26','Y',ff_dt_return[,chr])]
+  ff_dt_return[,chr := gsub('25','X',ff_dt_return[,chr])]
+  return(ff_dt_return)
+}
+
 fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_mat, x, onlyUpReg=T){
   #check the numeric section of the ff_mat for 0s,NAs???? and replace with col-wise non-zero min.
   numericPartOfFf_mat = data.matrix(ff_mat[,grep('tpm', colnames(ff_mat))])
@@ -36,6 +58,35 @@ fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_m
   # logic_mat = lg2Ratio_mat > abs(x)
   # logic_mat[,grep()]
   #colsToKeep = grep(ffID_v[i], colnames(ff_mat))
+}
+
+
+getTopXCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt,chromoNum, range_v, x, colStrWithChromLocations_str){
+  ffSorted_dt = getSortedDTwithSplitOfFirstCol(ff_dt=ff_dt, nameOfCol1=colStrWithChromLocations_str)
+  if(is.null(ff_dt)){ #unchecked
+    require(data.table)
+    ff_dt = fread("grep -v '^#' /home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt")
+  }
+  #check that range_v is valid
+  if (length(range_v)!=2){
+    print("Too few or two many items in range_v. Should be a vector of length 2")
+    return(NULL)
+  }else{
+    #make sure it goes in correct order
+    range_v = range(range_v)
+    #Find the first row where Start of our query is >= Start in dt
+    chromHits = which(ffSorted_dt[,chr]==as.character(chromoNum))
+    startRowChrom = chromHits[1]
+    endRowChrom = chromHits[length(chromHits)]
+    directHit = which(ffSorted_dt[startRowChrom:endRowChrom,Stop]>=range_v[1] & range_v[2]>= ffSorted_dt[startRowChrom:endRowChrom,Start])
+    z=sapply(ffSorted_dt[startRowChrom:endRowChrom,][directHit,grep('tpm', names(ffSorted_dt)),with=F],function(x)sort(x,decreasing=TRUE,index.return=T) )
+    for (dh in 1:length(directHit)){
+      
+    }
+    if(length(directHit)==0){
+      ##Look for nearest neighbor in ffSorted_dt
+    }
+    
 }
 
 getTopXCellTypes = function(ff_mat=NULL, chromoNum, range_v, x, colStrWithChromLocations_str){
