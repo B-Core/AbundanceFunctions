@@ -525,11 +525,12 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
 # q_list: S3 object of qvalue class (a list!) returned by qvalue()
 #   OR a list of such objects, OR NULL if no q-value cuts are intended
 # cut_ls: list of pre-specified elements used to select features 
-#   include_ID = vector of identifiers in rownames(normmat) to always show
+#   include_ID = vector of identifiers in rownames(normmat) to spare from qcuts
 #   qcut: either a number between 0 and 1 used as an upper qvalue limit for MDS,
 #     OR a number >1, assumed to be the top n qvalues to use in heatmap
 #     note that all qvalues <= nth qvalue will be included 
 #     (may increase effective n, especially with borderline qcut)
+#   qcutF: optional second qcut to use when q_dir is FALSE
 #   q_combine = "OR" or "AND" # union or intersection of multiple qvalue tests
 #   q_dir: logical of length(q_list)
 #     TRUE: select features with q < qcut for i'th qvalue object
@@ -551,6 +552,7 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
   # arguments
 
   # q-value cuts
+  # main qcut
   if( !exists("q_combine", where=cut_ls) ){
     cut_ls$q_combine = "OR"
   }
@@ -562,6 +564,16 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
     qflag = "qval"
   } else { # assume this is a number of top genes by qvalue on which to cut
     qflag = "qtop"
+  }
+  # optional qcut to use for qvalues for factors to be avoided
+  if( !exists("qcutF", where=cut_ls) ){
+    qflagF = "no"
+  } else if( !is.numeric(cut_ls$qcutF) | cut_ls$qcutF<=0 | cut_ls$qcutF>nrow(normmat) ){
+    stop(paste(cut_ls$qcutF,"must be a number > 0 and <= nrow(data)"))
+  } else if( cut_ls$qcutF <1 ) { # assume this is a qvalue cut
+    qflagF = "qval"
+  } else { # assume this is a number of top genes by qvalue which to avoid
+    qflagF = "qtop"
   }
 
   # test plotdir for filesep; add if absent
@@ -619,37 +631,70 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
     if( any(grepl("qvalues",names(q_list) )) ){ # one qvalue object supplied
       # rearrange for easier looping
       tmp = q_list; q_list=NULL; q_list[[1]] = tmp
+      names(q_list)[1] = "q_list"
     }
     for( i in 1:length(q_list) ){
       if( !any(grepl("qvalues",names(q_list[[i]]) )) ){
         stop("No qvalues in q_list element ",i)
       }
-      # set q-value cut for this qvalue object
-      if( qflag=="qtop" ){
-        # find q-value cut for given top n features
-        qcut = quantile(q_list[[i]]$qvalues, probs=cut_ls$qcut/length(q_list[[i]]$qvalues), na.rm=T)
-      } else if( qflag=="qval" ){
-        qcut = cut_ls$qcut
+      # set main q-value cut for this qvalue object
+      if( !exists("qflag") ){
+        warning("Warning! q-value object supplied without q-value cut")
+      } else {
+        if( qflag=="qtop" ){
+          # find q-value cut for given top n features
+          qcut = quantile(q_list[[i]]$qvalues, probs=cut_ls$qcut/length(q_list[[i]]$qvalues), na.rm=T)
+        } else if( qflag=="qval" ){
+          qcut = cut_ls$qcut
+        }
       }
-      if( exists("qcut") ){ # skip q-value masking if no cut was given
+      if( !exists("qflagF") ){
+        if( exists("q_dir", where=cut_ls) ){
+          if( any( !cut_ls$q_dir ) ){
+            if( exists("qcut") ){
+              message("Q-values to be avoided will use main qcut ",qcut)
+            } else {
+              warning("No q-value cut given for q-values to be avoided")
+            }
+          }
+        }
+      } else {
+        if( qflagF=="qtop" ){
+          # find q-value cut for given top n features
+          qcutF = quantile(q_list[[i]]$qvalues, probs=cut_ls$qcutF/length(q_list[[i]]$qvalues), na.rm=T)
+        } else if( qflagF=="qval" ){
+          qcutF = cut_ls$qcutF
+        }
+      }
+      if( exists("qcut")|exists("qcutF") ){ # skip q-value filter if no cut 
         q_include = FALSE
         if( !exists("q_dir", where=cut_ls) ) { q_include =TRUE  
         } else if( cut_ls$q_dir[i] ){ q_include=TRUE }
         if( q_include ){ 
-          # include significant q-values
-          if( any(grepl("OR",cut_ls$q_combine,ignore.case=TRUE)) ){
-            rowmask = rowmask | q_list[[i]]$qvalues < qcut
+          if( exists("qcut") ){
+            # include significant q-values
+            if( any(grepl("OR",cut_ls$q_combine,ignore.case=TRUE)) ){
+              rowmask = rowmask | q_list[[i]]$qvalues < qcut
+            } else {
+              rowmask = rowmask & q_list[[i]]$qvalues < qcut
+            }
           } else {
-            rowmask = rowmask & q_list[[i]]$qvalues < qcut
+            warning("Not including based on qvalues in ",names(q_list)[i]," with no main qcut")
           }
         } else { # avoid the significant qvalues
           # this is set to AND on assumption we will want to remove
           #  nuisance significance, not to include all non-significant nuisances
-          rowmask = rowmask & q_list[[i]]$qvalues > qcut
+          if( exists("qcutF") ){
+            rowmask = rowmask & q_list[[i]]$qvalues > qcutF
+          } else if( exists("qcut") ){
+            rowmask = rowmask & q_list[[i]]$qvalues > qcut
+          } else {
+            warning("Not avoiding based on qvalues in ",names(q_list)[i]," with no main qcut")
+          }
         }
       }
-    }
-  }
+    } # end q-list for-loop
+  }   # end if q-list
 
   # optional non-qvalue masks
   # include features
