@@ -61,33 +61,51 @@ fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_m
 }
 
 
-getTopXCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt,chromoNum, range_v, x, colStrWithChromLocations_str){
-  ffSorted_dt = getSortedDTwithSplitOfFirstCol(ff_dt=ff_dt, nameOfCol1=colStrWithChromLocations_str)
-  if(is.null(ff_dt)){ #unchecked
-    require(data.table)
-    ff_dt = fread("grep -v '^#' /home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt")
-  }
-  #check that range_v is valid
-  if (length(range_v)!=2){
-    print("Too few or two many items in range_v. Should be a vector of length 2")
-    return(NULL)
-  }else{
-    #make sure it goes in correct order
-    range_v = range(range_v)
-    #Find the first row where Start of our query is >= Start in dt
-    chromHits = which(ffSorted_dt[,chr]==as.character(chromoNum))
-    startRowChrom = chromHits[1]
-    endRowChrom = chromHits[length(chromHits)]
-    directHit = which(ffSorted_dt[startRowChrom:endRowChrom,Stop]>=range_v[1] & range_v[2]>= ffSorted_dt[startRowChrom:endRowChrom,Start])
-    z=sapply(ffSorted_dt[startRowChrom:endRowChrom,][directHit,grep('tpm', names(ffSorted_dt)),with=F],function(x)sort(x,decreasing=TRUE,index.return=T) )
-    for (dh in 1:length(directHit)){
-      
-    }
-    if(length(directHit)==0){
-      ##Look for nearest neighbor in ffSorted_dt
-    }
-    
-}
+##Create dummy data set
+ffDummy_dt = data.table(Annotation=c("chr10:10..20,-", "chr10:25..30,-","chr10:35..100,-","chr10:106..205,-","chr10:223..250,-","chr10:269..478,-","chr10:699..1001,-","chr10:2000..2210,-","chr10:2300..2500,-","chr10:2678..5678,-"),tpmOne=c(0,0,0.213,1,1.2,0.5,0.7,0.9,0.8,0.86), tpmTwo=c(100,1000,1001,1500,900,877,1212,1232,1312,0),tpmThree=c(0.2138595,0,0,0,0,0,0.6415786,0,0,0))
+getTopXCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(31,32), N=2, colStrWithChromLocations_str="Annotation")
+
+# getTopNCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt,chromoNum, range_v, N, colStrWithChromLocations_str){
+#   if(is.null(ff_dt)){ #unchecked
+#     require(data.table)
+#     ff_dt = fread("grep -v '^#' /home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt")
+#   }
+#   ffSorted_dt = getSortedDTwithSplitOfFirstCol(ff_dt=ff_dt, nameOfCol1=colStrWithChromLocations_str)
+#   #check that range_v is valid
+#   if (length(range_v)!=2){
+#     print("Too few or two many items in range_v. Should be a vector of length 2")
+#     return(NULL)
+#   }else{
+#     #make sure it goes in correct order
+#     range_v = range(range_v)
+#     #Find the first row where Start of our query is >= Start in dt
+#     chromHits = which(ffSorted_dt[,chr]==as.character(chromoNum))
+#     startRowChrom = chromHits[1]
+#     endRowChrom = chromHits[length(chromHits)]
+#     directHit = which(ffSorted_dt[startRowChrom:endRowChrom,Stop]>=range_v[1] & range_v[2]>= ffSorted_dt[startRowChrom:endRowChrom,Start])
+#     #I think this has to be a for loop, because I have to sort each row independently, and there's no way to retain colnames under those circumstances
+#     #topCells = t(apply(ffSorted_dt[startRowChrom:endRowChrom,][directHit,grep('tpm', names(ffSorted_dt)),with=F],1,sort))
+#     #topCells=sapply(ffSorted_dt[startRowChrom:endRowChrom,][directHit,grep('tpm', names(ffSorted_dt)),with=F],function(x)order(x,decreasing=TRUE))
+#     #topCells[1:N]
+#     matches_ls = list()
+#     if(length(directHit)>1){
+#       for (dh in 1:length(directHit)){
+#         topCells_dt = sort(ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],grep('tpm', names(ffSorted_dt)),with=F], decreasing = TRUE)[,1:N,with=F]
+#         #topCellsName_v = names(topCells_dt)
+#         matches_ls[[length(matches_ls)+1]] = topCells_dt
+#         names(matches_ls)[length(matches_ls)] = paste(chromoNum,range_v,"query",sep="_")
+#       }
+#     }
+#     if(length(directHit)==0){
+#       ##Look for first occassion where Start in the ffSort_dt is greater than Stop in the query
+#       nearestDownstreamNeighborIdx = which(ffSorted_dt[startRowChrom:endRowChrom,Start]>range_v[2])[1]
+#       if (nearestDownstreamNeighBorIdx>1){
+#         nearestUpstreamNeighborIdx
+#       }
+#       
+#     }
+#     
+# }
 
 getTopXCellTypes = function(ff_mat=NULL, chromoNum, range_v, x, colStrWithChromLocations_str){
   if(is.null(ff_mat)){
