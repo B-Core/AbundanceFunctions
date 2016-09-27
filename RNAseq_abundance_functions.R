@@ -143,7 +143,7 @@ norm_matrix = function(tag, raw.mat, expt.design, normvec=c("loess","qspln","qua
   }
   # set background adjustment
   bkgd = bkgdFUN(raw.mat)
-  message(sprintf("Mynorm = %s, min = %1.2f, background = %1.2f", mynorm, min(raw.mat), bkgd))
+  message(sprintf("Set values: min = %1.2f, background = %1.2f", min(raw.mat), bkgd))
 
   # not yet implemented:
   # if indicated, normalize by selected annCol
