@@ -1,4 +1,7 @@
-getSortedDTwithSplitOfFirstCol = function(ff_dt,nameOfCol1){
+getSortedDTwithSplitOfFirstCol = function(ff_dt,nameOfCol1="00Annotation"){
+  #Function to return a data table of the fantom5 hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt data SORTED numerically by numeric() chromosome number and THEN by Start position
+  #ff_dt is a data table of hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt.
+  #nameOfCol1 is is a string containing the name() of the column in ff_dt containing the position information. In the ff_dt, note that the position information needs to be parsed out, which this function('s dependency) does automatically. Default is "00Annotation".
   splits_ls = lapply(ff_dt[,get(nameOfCol1)], function(x) unlist(strsplit(x,':|\\.+|,'))[1:3])
   splits_mat = matrix(unlist(splits_ls), nrow=length(splits_ls), byrow = T)
   cNamesTmp = copy(names(ff_dt))
@@ -60,7 +63,15 @@ fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_m
   #colsToKeep = grep(ffID_v[i], colnames(ff_mat))
 }
 
-getTopNCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt,chromoNum, range_v, N, colStrWithChromLocations_str) {
+getTopNCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt,chromoNum, range_v, N, colStrWithChromLocations_str="00Annotation") {
+  #Takes as input a genome position (chr,Start,Stop), looks for entries in ff_dt with an intersect with the query, and returns the top N tpm columns FOR EACH hit as a separate data.table. 
+  #In other words, the output is a LIST of data.tables.
+  #If no matching entries are found, the function will search for the nearest entry and return the top N tpm columns of that. If there are two nearest neighbors, both will be returned.
+  #ff_dt is a data table of hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt. If no data.table is provided, the function will look for the hard-coded path in exacloud (see below).
+  #chromoNum is a numeric() chromosome number (nb NOT "chr1") of the query position.
+  #range_v is a numeric() vector containing the Start and Stop bp position of the querty (e.g., range_v = c(100,123))
+  #N is a numeric() argument the retreives the top N largest tpm-containing columns in a given row of ff_dt
+  #colStrWithChromLocations_str is a string containing the name() of the column in ff_dt containing the position information. In the ff_dt, note that the position information needs to be parsed out, which this function('s dependency) does automatically. Default is "00Annotation".
   if(is.null(ff_dt)){ #unchecked
     require(data.table)
     ff_dt = fread("grep -v '^#' /home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt")
@@ -88,7 +99,7 @@ getTopNCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt,chromoNum, range
         topCells_dt = sort(ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],grep('tpm', names(ffSorted_dt)),with=F], decreasing = TRUE)[,1:N,with=F]
         #topCellsName_v = names(topCells_dt)
         matches_ls[[length(matches_ls)+1]] = topCells_dt
-        names(matches_ls)[length(matches_ls)] = paste(chromoNum,range_v[1],range_v[2],"query",sep="_")
+        names(matches_ls)[length(matches_ls)] = paste(chromoNum,max(range_v[1],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Start]),min(range_v[2],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Stop]),"query",sep="_")
       }
       return(matches_ls)
     }
