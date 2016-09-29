@@ -2,8 +2,9 @@ getTopNCellTypesDtVersionWithOutOfRangeReturns_dtWrap = function(listOfListOfDat
   master_dt = NULL
   listOfListOfDataTables = copy(listOfListOfDataTables_input)
   for(m in 1:length(listOfListOfDataTables)){
+    #contributing_dt = NULL
     for(s in 1:length(listOfListOfDataTables[[m]])){
-      contributing_dt[,query_info := names(listOfListOfDataTables)[m]]
+      contributing_dt = data.table(query_info = names(listOfListOfDataTables)[m] )
       #setcolorder(contributing_dt,c("query_info","match_info",names(contributing_dt)[! names(contributing_dt)  %in% c("match_info", "query_info")]))
       contributing_dt[,match_info := names(listOfListOfDataTables[[m]][s])]
       for (tpmcol in 1:N){
