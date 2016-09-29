@@ -1,3 +1,19 @@
+getTopNCellTypesDtVersionWithOutOfRangeReturns_dtWrap = function(listOfListOfDataTables_input){
+  master_dt = NULL
+  listOfListOfDataTables = copy(listOfListOfDataTables_input)
+  for(m in 1:length(listOfListOfDataTables)){
+    for(s in 1:length(listOfListOfDataTables[[m]])){
+      contributing_dt = listOfListOfDataTables[[m]][[s]]
+      contributing_dt[,match_info := names(listOfListOfDataTables[[m]][s])]
+      contributing_dt[,query_info := names(listOfListOfDataTables)[m]]
+      setcolorder(contributing_dt,c("query_info","match_info",names(contributing_dt)[! names(contributing_dt)  %in% c("match_info", "query_info")]))
+      master_dt = rbind(master_dt,contributing_dt)#rbindlist(contributing_dt,contributing_dt,use.names = F,fill=F)
+      rm(contributing_dt)
+    }
+  }
+  return(master_dt)
+}
+
 getSortedDTwithSplitOfFirstCol = function(ff_dt,nameOfCol1="00Annotation"){
   #Function to return a data table of the fantom5 hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt data SORTED numerically by numeric() chromosome number and THEN by Start position
   #ff_dt is a data table of hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt.
@@ -99,7 +115,7 @@ getTopNCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt,chromoNum, range
         topCells_dt = sort(ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],grep('tpm', names(ffSorted_dt)),with=F], decreasing = TRUE)[,1:N,with=F]
         #topCellsName_v = names(topCells_dt)
         matches_ls[[length(matches_ls)+1]] = topCells_dt
-        names(matches_ls)[length(matches_ls)] = paste(chromoNum,max(range_v[1],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Start]),min(range_v[2],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Stop]),"query",sep="_")
+        names(matches_ls)[length(matches_ls)] = paste(chromoNum,max(range_v[1],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Start]),min(range_v[2],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Stop]),"matched_region",sep="_")
       }
       return(matches_ls)
     }
