@@ -1,12 +1,14 @@
-getTopNCellTypesDtVersionWithOutOfRangeReturns_dtWrap = function(listOfListOfDataTables_input){
+getTopNCellTypesDtVersionWithOutOfRangeReturns_dtWrap = function(listOfListOfDataTables_input,N){
   master_dt = NULL
   listOfListOfDataTables = copy(listOfListOfDataTables_input)
   for(m in 1:length(listOfListOfDataTables)){
     for(s in 1:length(listOfListOfDataTables[[m]])){
-      contributing_dt = listOfListOfDataTables[[m]][[s]]
-      contributing_dt[,match_info := names(listOfListOfDataTables[[m]][s])]
       contributing_dt[,query_info := names(listOfListOfDataTables)[m]]
-      setcolorder(contributing_dt,c("query_info","match_info",names(contributing_dt)[! names(contributing_dt)  %in% c("match_info", "query_info")]))
+      #setcolorder(contributing_dt,c("query_info","match_info",names(contributing_dt)[! names(contributing_dt)  %in% c("match_info", "query_info")]))
+      contributing_dt[,match_info := names(listOfListOfDataTables[[m]][s])]
+      for (tpmcol in 1:N){
+        contributing_dt [ ,paste0("CellType_",tpmcol) := names(listOfListOfDataTables[[m]][[s]])[tpmcol]]
+      }
       master_dt = rbind(master_dt,contributing_dt) #rbindlist(contributing_dt,contributing_dt,use.names = F,fill=F)
       rm(contributing_dt)
     }
