@@ -7,7 +7,7 @@ getTopNCellTypesDtVersionWithOutOfRangeReturns_dtWrap = function(listOfListOfDat
       contributing_dt[,match_info := names(listOfListOfDataTables[[m]][s])]
       contributing_dt[,query_info := names(listOfListOfDataTables)[m]]
       setcolorder(contributing_dt,c("query_info","match_info",names(contributing_dt)[! names(contributing_dt)  %in% c("match_info", "query_info")]))
-      master_dt = rbind(master_dt,contributing_dt)#rbindlist(contributing_dt,contributing_dt,use.names = F,fill=F)
+      master_dt = rbind(master_dt,contributing_dt) #rbindlist(contributing_dt,contributing_dt,use.names = F,fill=F)
       rm(contributing_dt)
     }
   }
