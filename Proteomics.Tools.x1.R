@@ -372,7 +372,7 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
   message(sprintf('mySD = %1.3f, mymask rows = %s, !mymask rows = %s',
                    mySD, sum(mymask), sum(!mymask)))
 
-  makeHeatmap(normmat=normmat[mymask,], ratiomat=ratiomat[mymask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct)
+  ah_ls = makeHeatmap(normmat=normmat[mymask,], ratiomat=ratiomat[mymask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct)
 
   if(plot2file) dev.off()
 
@@ -387,6 +387,7 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
 
   if(plot2file) dev.off()
 
+  invisible(list(ah_ls=ah_ls, obj_MDS=obj_MDS))
   }
 }  # end of qc.clusters function
 
@@ -721,7 +722,7 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
   }
 
   # plot heatmap
-  makeHeatmap(normmat=normmat[rowmask,], ratiomat=ratiomat[rowmask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct, clim_fix=clim_fix, cexRow=cexRow)
+  ah_ls = makeHeatmap(normmat=normmat[rowmask,], ratiomat=ratiomat[rowmask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct, clim_fix=clim_fix, cexRow=cexRow)
   
   if(plot2file) dev.off()
 
@@ -739,7 +740,7 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
 
 
   # return processed data
-  invisible( list(ratiomat=ratiomat, rowmask=rowmask, obj_MDS=obj_MDS) )
+  invisible( list(ratiomat=ratiomat, rowmask=rowmask, ah_ls=ah_ls, obj_MDS=obj_MDS) )
 } # end designRatios
 
 
@@ -873,23 +874,42 @@ makeMDSplot = function (normmat, attribs, oneclass, colorspec, plottitle,
 
 makeHeatmap = function (normmat, ratiomat, attribs, plottitle, 
                         clim.pct=.99, clim_fix=NULL, colorbrew="-PiYG:64", 
-                        cexRow=0.00001 ) {
+                        cexRow=0.00001, cexCol=min(0.2 + 1/log10(nc), 1.2),
+                        labcoltype=c("colnames","colnums") ) {
 # This function makes a heatmap of ratio data, displaying experimental design values as tracks
 # Uses the matrix values to cluster the data
-#  normmat:  abundance data matrix, with unique & informative colnames 
-#  ratiomat:  ratio data matrix, derived from normmat
-#    must have same row and column order!!
+#  normmat:  abundance data matrix, just used to set color limits
+#  ratiomat:  ratio data matrix, optimally derived from normmat,
+#    with unique & informative colnames 
 #  attribs:  list of sample classifications to be tracked in clustering
 #    each list element contains a string vector with one label per sample
+#    set to NA to omit
 #  colorbrew is a colorBrewer string specifying a heatmap color scale 
 #    colors are generated per sample by their clustering variable values
 #  plottitle:  title for all plots
 #  clim.pct:  0:1 - fraction of data to limit max color
 #  clim_fix: if set, max abs ratio to show; data>clim_fix are shown as clim_fix
 #  cexRow: rowlabel size for heatmap, set to ~invisible by default
+#  cexCol: collabel size for heatmap, set to aheatmap default by default
+#  labcoltype: colnames to show ratiomat column names, colnums to show col #s
 
   # imports
   require(NMF)
+
+  # set column labels
+  if( any(grepl("colnames",labcoltype,ignore.case=T)) ){
+    labCol = colnames(ratiomat)
+  } else {
+    labCol = 1:ncol(ratiomat)
+  }
+  # calculate the number of colors in each half vector
+  if(length(colorbrew)>1){ # color vector given
+    halfbreak = length(colorbrew)/2
+  } else if(any(grepl('^[^:]+:([0-9]+)$',colorbrew)) ){
+    halfbreak = as.numeric(sub('^[^:]+:([0-9]+)$','\\1',colorbrew))/2
+  } else { # aheatmap also takes a single colorspec and makes 2-color map
+    halfbreak = 1
+  }
 
   # calculate the color limits 
   # color limit for plotting: clim.pct percentile of data, divided in half (~dist to med) gets color scale; values outside this range get max color
@@ -897,19 +917,28 @@ makeHeatmap = function (normmat, ratiomat, attribs, plottitle,
   c.lim = quantile( sapply(1:nrow(normmat),
                            function(x){ diff(range( normmat[x,], na.rm=T )) }),
                     probs=clim.pct, na.rm=T)/2
-  # outer limit
+  # outer limits
   if( !is.null(clim_fix) ){
     ratiomat[ratiomat>clim_fix] = clim_fix
     ratiomat[ratiomat<=-clim_fix] = -clim_fix
   }
   c.lim0 = max(abs(ratiomat),na.rm=T)
+  c.min0 = min(ratiomat,na.rm=T) # true up lower limit -- make this optional?
   
+  # make vector of colorbreaks
+  if(halfbreak>1) { # room for inner and outer limits
+    colorbreaks=c(c.min0, seq(from=-c.lim, to=c.lim, by=c.lim/halfbreak), c.lim0)
+  } else {
+    colorbreaks=c(c.min0,(c.min0+c.lim0)/2, c.lim0)
+  }
+
   # Plot
-  aheatmap(ratiomat, color=colorbrew, cexRow=cexRow, 
-           breaks=c(-c.lim0, seq(from=-c.lim, to=c.lim, by=c.lim/31), c.lim0),
-           annCol=attribs, labCol=colnames(normmat),
+  ah_ls = aheatmap(ratiomat, cexRow=cexRow, 
+           color=colorbrew, breaks=colorbreaks,
+           annCol=attribs, labCol=colnames(ratiomat),
            main=plotdata$plottitle)
 
+  return(ah_ls)
 } # end makeHeatmap
 
 
