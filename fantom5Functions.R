@@ -1,4 +1,25 @@
-getTopNCellTypesDtVersionWithOutOfRangeReturns_dtWrap = function(listOfListOfDataTables_input,N){
+FFTopNCellTypesWrapper = function(ff_dt, query_dt, ChrColName, StartColName, StopColName, N, savePath, colStrWithChromLocations_str="00Annotation", queryDtENSRidColName="ENSRid", queryDtRegDescriptionColName="gwasEnsemblRegDescription", queryDtVarLenAcrossENSRidColName="VarLenAcrossENSRid_x"){
+  if(is.null(ff_dt)){ #unchecked
+    require(data.table)
+    ff_dt = fread("grep -v '^#' /home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt")
+  }
+  FFtop20cells_lsOfdt_ls = list()
+  for(r in 1:nrow(query_dt)){
+    if(r%%100==0) {print(r)}
+    FFtop20cells_lsOfdt_ls[[r]] = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=as.numeric(query_dt[r,get(ChrColName)]), range_v=c(as.numeric(query_dt[r,get(StartColName)]),as.numeric(query_dt[r,get(StopColName)])), N=N, colStrWithChromLocations_str=colStrWithChromLocations_str)
+    names(FFtop20cells_lsOfdt_ls)[r] = paste(query_dt[r,get(queryDtENSRidColName)],query_dt[r,get(queryDtRegDescriptionColName)], query_dt[r,get(ChrColName)],query_dt[r,get(StartColName)],query_dt[r,get(StopColName)],"VarLenAcrossENSRid",query_dt[r,get(queryDtVarLenAcrossENSRidColName)],sep="_")
+  }
+  sink(file=paste0(savePath,"FFtop20cells_lsOfdt_ls.txt"))
+  FFtop20cells_lsOfdt_ls
+  sink()
+  z=ConvertFFlsOflsOfDtToDt(FFtop20cells_lsOfdt_ls,N)
+  write.table(z, file=paste0(savePath, "Fantom5Top",N,"CellTypes.txt"), sep="\t", row.names = F)
+  output_ls = list(z, FFtop20cells_lsOfdt_ls)
+  names(output_ls) = c(paste0("Data table of query and match output for top ",N," cell types" ), "List of list of data tables output containing actual tpms")
+  return(output_ls)
+}
+
+ConvertFFlsOflsOfDtToDt = function(listOfListOfDataTables_input,N){
   master_dt = NULL
   listOfListOfDataTables = copy(listOfListOfDataTables_input)
   for(m in 1:length(listOfListOfDataTables)){
@@ -88,7 +109,7 @@ getTopNCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt,chromoNum, range
   #If no matching entries are found, the function will search for the nearest entry and return the top N tpm columns of that. If there are two nearest neighbors, both will be returned.
   #ff_dt is a data table of hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt. If no data.table is provided, the function will look for the hard-coded path in exacloud (see below).
   #chromoNum is a numeric() chromosome number (nb NOT "chr1") of the query position.
-  #range_v is a numeric() vector containing the Start and Stop bp position of the querty (e.g., range_v = c(100,123))
+  #range_v is a numeric() vector containing the Start and Stop bp position of the query (e.g., range_v = c(100,123))
   #N is a numeric() argument the retreives the top N largest tpm-containing columns in a given row of ff_dt
   #colStrWithChromLocations_str is a string containing the name() of the column in ff_dt containing the position information. In the ff_dt, note that the position information needs to be parsed out, which this function('s dependency) does automatically. Default is "00Annotation".
   if(is.null(ff_dt)){ #unchecked
