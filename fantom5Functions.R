@@ -1,4 +1,4 @@
-FFTopNCellTypesWrapper = function(ff_dt, query_dt, ChrColName, StartColName, StopColName, N, savePath, colStrWithChromLocations_str="00Annotation", queryDtENSRidColName="ENSRid", queryDtRegDescriptionColName="gwasEnsemblRegDescription", queryDtVarLenAcrossENSRidColName="VarLenAcrossENSRid_x"){
+FFTopNCellTypesWrapper = function(ff_dt, query_dt, ChrColName, StartColName, StopColName, N, savePath, colStrWithChromLocations_str="00Annotation"){ #, queryDtENSRidColName="ENSRid", queryDtRegDescriptionColName="gwasEnsemblRegDescription", queryDtVarLenAcrossENSRidColName="VarLenAcrossENSRid_x"){
   if(is.null(ff_dt)){ #unchecked
     require(data.table)
     ff_dt = fread("grep -v '^#' /home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt")
@@ -7,10 +7,11 @@ FFTopNCellTypesWrapper = function(ff_dt, query_dt, ChrColName, StartColName, Sto
   for(r in 1:nrow(query_dt)){
     if(r%%100==0) {print(r)}
     FFtop20cells_lsOfdt_ls[[r]] = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=as.numeric(query_dt[r,get(ChrColName)]), range_v=c(as.numeric(query_dt[r,get(StartColName)]),as.numeric(query_dt[r,get(StopColName)])), N=N, colStrWithChromLocations_str=colStrWithChromLocations_str)
-    names(FFtop20cells_lsOfdt_ls)[r] = paste(query_dt[r,get(queryDtENSRidColName)],query_dt[r,get(queryDtRegDescriptionColName)], query_dt[r,get(ChrColName)],query_dt[r,get(StartColName)],query_dt[r,get(StopColName)],"VarLenAcrossENSRid",query_dt[r,get(queryDtVarLenAcrossENSRidColName)],sep="_")
+    #names(FFtop20cells_lsOfdt_ls)[r] = paste(query_dt[r,get(queryDtENSRidColName)],query_dt[r,get(queryDtRegDescriptionColName)], query_dt[r,get(ChrColName)],query_dt[r,get(StartColName)],query_dt[r,get(StopColName)],"VarLenAcrossENSRid",query_dt[r,get(queryDtVarLenAcrossENSRidColName)],sep="_") #Attn. This line might could change to be more generalizeable
+    names(FFtop20cells_lsOfdt_ls)[r] = paste(query_dt[r,get(ChrColName)],query_dt[r,get(StartColName)],query_dt[r,get(StopColName)],"query",sep="_")
   }
   sink(file=paste0(savePath,"FFtop20cells_lsOfdt_ls.txt"))
-  FFtop20cells_lsOfdt_ls
+  print(FFtop20cells_lsOfdt_ls)
   sink()
   z=ConvertFFlsOflsOfDtToDt(FFtop20cells_lsOfdt_ls,N)
   write.table(z, file=paste0(savePath, "Fantom5Top",N,"CellTypes.txt"), sep="\t", row.names = F)
