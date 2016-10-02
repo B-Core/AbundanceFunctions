@@ -910,6 +910,7 @@ makeHeatmap = function (normmat, ratiomat, attribs, plottitle,
   } else { # aheatmap also takes a single colorspec and makes 2-color map
     halfbreak = 1
   }
+  if(halfbreak>1){halfbreak=halfbreak-1} # make room for outer limits!
 
   # calculate the color limits 
   # color limit for plotting: clim.pct percentile of data, divided in half (~dist to med) gets color scale; values outside this range get max color
@@ -926,9 +927,9 @@ makeHeatmap = function (normmat, ratiomat, attribs, plottitle,
   c.min0 = min(ratiomat,na.rm=T) # true up lower limit -- make this optional?
   
   # make vector of colorbreaks
-  if(halfbreak>1) { # room for inner and outer limits
-    colorbreaks=c(c.min0, seq(from=-c.lim, to=c.lim, by=c.lim/halfbreak), c.lim0)
-  } else {
+  if(halfbreak>1) { # use inner and outer limits
+    colorbreaks=c(-c.lim0, seq(from=-c.lim, to=c.lim, by=c.lim/halfbreak), c.lim0)
+  } else { # use outer limits only
     colorbreaks=c(c.min0,(c.min0+c.lim0)/2, c.lim0)
   }
 
