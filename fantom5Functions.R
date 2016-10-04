@@ -3,19 +3,19 @@ FFTopNCellTypesWrapper = function(ff_dt, query_dt, ChrColName, StartColName, Sto
     require(data.table)
     ff_dt = fread("grep -v '^#' /home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt")
   }
-  FFtop20cells_lsOfdt_ls = list()
+  FFtopNcells_lsOfdt_ls = list()
   for(r in 1:nrow(query_dt)){
     if(r%%100==0) {print(r)}
-    FFtop20cells_lsOfdt_ls[[r]] = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=as.numeric(query_dt[r,get(ChrColName)]), range_v=c(as.numeric(query_dt[r,get(StartColName)]),as.numeric(query_dt[r,get(StopColName)])), N=N, colStrWithChromLocations_str=colStrWithChromLocations_str)
-    #names(FFtop20cells_lsOfdt_ls)[r] = paste(query_dt[r,get(queryDtENSRidColName)],query_dt[r,get(queryDtRegDescriptionColName)], query_dt[r,get(ChrColName)],query_dt[r,get(StartColName)],query_dt[r,get(StopColName)],"VarLenAcrossENSRid",query_dt[r,get(queryDtVarLenAcrossENSRidColName)],sep="_") #Attn. This line might could change to be more generalizeable
-    names(FFtop20cells_lsOfdt_ls)[r] = paste(query_dt[r,get(ChrColName)],query_dt[r,get(StartColName)],query_dt[r,get(StopColName)],"query",sep="_")
+    FFtopNcells_lsOfdt_ls[[r]] = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=as.numeric(query_dt[r,get(ChrColName)]), range_v=c(as.numeric(query_dt[r,get(StartColName)]),as.numeric(query_dt[r,get(StopColName)])), N=N, colStrWithChromLocations_str=colStrWithChromLocations_str)
+    names(FFtopNcells_lsOfdt_ls)[r] = paste(query_dt[r,get(queryDtENSRidColName)],query_dt[r,get(queryDtRegDescriptionColName)], query_dt[r,get(ChrColName)],query_dt[r,get(StartColName)],query_dt[r,get(StopColName)],"VarLenAcrossENSRid",query_dt[r,get(queryDtVarLenAcrossENSRidColName)],sep="_") #Attn. This line might could change to be more generalizeable
+    #names(FFtopNcells_lsOfdt_ls)[r] = paste(query_dt[r,get(ChrColName)],query_dt[r,get(StartColName)],query_dt[r,get(StopColName)],"query",sep="_")
   }
-  sink(file=paste0(savePath,"FFtop20cells_lsOfdt_ls.txt"))
-  print(FFtop20cells_lsOfdt_ls)
+  sink(file=paste0(savePath,"FFtop",N,"cells_lsOfdt_ls.txt"))
+  print(FFtopNcells_lsOfdt_ls)
   sink()
-  z=ConvertFFlsOflsOfDtToDt(FFtop20cells_lsOfdt_ls,N)
+  z=ConvertFFlsOflsOfDtToDt(FFtopNcells_lsOfdt_ls,N)
   write.table(z, file=paste0(savePath, "Fantom5Top",N,"CellTypes.txt"), sep="\t", row.names = F)
-  output_ls = list(z, FFtop20cells_lsOfdt_ls)
+  output_ls = list(z, FFtopNcells_lsOfdt_ls)
   names(output_ls) = c(paste0("Data table of query and match output for top ",N," cell types" ), "List of list of data tables output containing actual tpms")
   return(output_ls)
 }
@@ -29,6 +29,7 @@ ConvertFFlsOflsOfDtToDt = function(listOfListOfDataTables_input,N){
       contributing_dt = data.table(query_info = names(listOfListOfDataTables)[m] )
       #setcolorder(contributing_dt,c("query_info","match_info",names(contributing_dt)[! names(contributing_dt)  %in% c("match_info", "query_info")]))
       contributing_dt[,match_info := names(listOfListOfDataTables[[m]][s])]
+      
       for (tpmcol in 1:N){
         contributing_dt [ ,paste0("CellType_",tpmcol) := names(listOfListOfDataTables[[m]][[s]])[tpmcol]]
       }
@@ -140,7 +141,7 @@ getTopNCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt,chromoNum, range
         topCells_dt = sort(ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],grep('tpm', names(ffSorted_dt)),with=F], decreasing = TRUE)[,1:N,with=F]
         #topCellsName_v = names(topCells_dt)
         matches_ls[[length(matches_ls)+1]] = topCells_dt
-        names(matches_ls)[length(matches_ls)] = paste(chromoNum,max(range_v[1],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Start]),min(range_v[2],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Stop]),"matched_region",sep="_")
+        names(matches_ls)[length(matches_ls)] = paste(chromoNum,max(range_v[1],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Start]),min(range_v[2],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Stop]),"matched_region_OriginalColName",ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],][[colStrWithChromLocations_str]],sep="_")
       }
       return(matches_ls)
     }
@@ -219,3 +220,20 @@ getTopXCellTypes = function(ff_mat=NULL, chromoNum, range_v, x, colStrWithChromL
 # getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(31,33), N=2, colStrWithChromLocations_str="Annotation")
 # getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(1,3), N=2, colStrWithChromLocations_str="Annotation")
 # getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(10000,10030), N=2, colStrWithChromLocations_str="Annotation")
+
+# numericPartOfFf_mat = data.matrix(ffDummy_dt[,grep('tpm', colnames(ffDummy_dt)),with=F])
+# ffRanks_mat = matrix(nrow=(nrow(numericPartOfFf_mat)), ncol=length(grep('tpm', colnames(ffDummy_dt))))
+# colnames(ffRanks_mat) = colnames(ffDummy_dt)[grep('tpm', colnames(ffDummy_dt))]
+# for (r in 1:nrow(numericPartOfFf_mat)){
+#   ffRanks_mat[r,] = rank(-numericPartOfFf_mat[r,], na.last = T)
+# }
+# rankCount_mat = matrix(nrow=1, ncol=length(grep('tpm', colnames(ffDummy_dt))))
+# colnames(rankCount_mat) = colnames(ffRanks_mat)
+# N=2
+# for (cNum in 1:ncol(ffRanks_mat)){
+#   rankCount_mat[1,cNum] = sum(ffRanks_mat[,cNum]<=N)
+#   #colnames(rankCount_mat)[cNum] = colnames(ffRanks_mat)[cNum]
+# }
+ 
+ #ffDummy_dt[,sum(test_v%in%.I), by= .I] #1:nrow(ffDummy_dt)]
+ 
