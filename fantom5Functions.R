@@ -7,8 +7,8 @@ FFTopNCellTypesWrapper = function(ff_dt, query_dt, ChrColName, StartColName, Sto
   for(r in 1:nrow(query_dt)){
     if(r%%100==0) {print(r)}
     FFtopNcells_lsOfdt_ls[[r]] = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=as.numeric(query_dt[r,get(ChrColName)]), range_v=c(as.numeric(query_dt[r,get(StartColName)]),as.numeric(query_dt[r,get(StopColName)])), N=N, colStrWithChromLocations_str=colStrWithChromLocations_str)
-    names(FFtopNcells_lsOfdt_ls)[r] = paste(query_dt[r,get(queryDtENSRidColName)],query_dt[r,get(queryDtRegDescriptionColName)], query_dt[r,get(ChrColName)],query_dt[r,get(StartColName)],query_dt[r,get(StopColName)],"VarLenAcrossENSRid",query_dt[r,get(queryDtVarLenAcrossENSRidColName)],sep="_") #Attn. This line might could change to be more generalizeable
-    #names(FFtopNcells_lsOfdt_ls)[r] = paste(query_dt[r,get(ChrColName)],query_dt[r,get(StartColName)],query_dt[r,get(StopColName)],"query",sep="_")
+    #names(FFtopNcells_lsOfdt_ls)[r] = paste(query_dt[r,get(queryDtENSRidColName)],query_dt[r,get(queryDtRegDescriptionColName)], query_dt[r,get(ChrColName)],query_dt[r,get(StartColName)],query_dt[r,get(StopColName)],"VarLenAcrossENSRid",query_dt[r,get(queryDtVarLenAcrossENSRidColName)],sep="_") #Attn. This line might could change to be more generalizeable
+    names(FFtopNcells_lsOfdt_ls)[r] = paste(query_dt[r,get(ChrColName)],query_dt[r,get(StartColName)],query_dt[r,get(StopColName)],"query",sep="_")
   }
   sink(file=paste0(savePath,"FFtop",N,"cells_lsOfdt_ls.txt"))
   print(FFtopNcells_lsOfdt_ls)
@@ -236,4 +236,6 @@ getTopXCellTypes = function(ff_mat=NULL, chromoNum, range_v, x, colStrWithChromL
 # }
  
  #ffDummy_dt[,sum(test_v%in%.I), by= .I] #1:nrow(ffDummy_dt)]
- 
+ # test_v = c(0,0,0.86)
+ # which(ffDummy_dt[, rowSums(.SD), .SDcols=2:ncol(ffDummy_dt)] == sum(test_v))
+ #ffDummy_dt[, if (all(.SD %in% test_v)) .SD, Annotation]
