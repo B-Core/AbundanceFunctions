@@ -872,13 +872,15 @@ makeMDSplot = function (normmat, attribs, oneclass, colorspec, plottitle,
 } # end makeMDSplot
 
 
-makeHeatmap = function (normmat, ratiomat, attribs, plottitle, 
+makeHeatmap = function (ratiomat, attribs, plottitle, normmat=NULL,
                         clim.pct=.99, clim_fix=NULL, colorbrew="-PiYG:64", 
-                        cexRow=0.00001, cexCol=min(0.2 + 1/log10(nc), 1.2),
+                        cexRow=0.00001, 
+                        cexCol=min(0.2 + 1/log10(ncol(ratiomat)), 1.2),
                         labcoltype=c("colnames","colnums") ) {
 # This function makes a heatmap of ratio data, displaying experimental design values as tracks
 # Uses the matrix values to cluster the data
-#  normmat:  abundance data matrix, just used to set color limits
+#  normmat:  abundance data matrix, optionally used to set color limits
+#   set to null to use ratiomat for color limits
 #  ratiomat:  ratio data matrix, optimally derived from normmat,
 #    with unique & informative colnames 
 #  attribs:  list of sample classifications to be tracked in clustering
@@ -913,11 +915,17 @@ makeHeatmap = function (normmat, ratiomat, attribs, plottitle,
   if(halfbreak>1){halfbreak=halfbreak-1} # make room for outer limits!
 
   # calculate the color limits 
-  # color limit for plotting: clim.pct percentile of data, divided in half (~dist to med) gets color scale; values outside this range get max color
+  # if normmat is provided: clim.pct percentile of data, divided in half (~dist to med) gets color scale
+  # if no normmat: clim.pct percentile of ratio data gets color scale
+  #    values outside this range get max color
   # inner limit
-  c.lim = quantile( sapply(1:nrow(normmat),
+  if( !is.null(normmat) ){
+    c.lim = quantile( sapply(1:nrow(normmat),
                            function(x){ diff(range( normmat[x,], na.rm=T )) }),
                     probs=clim.pct, na.rm=T)/2
+  } else { 
+    c.lim = quantile( ratiomat, probs=clim.pct )
+  }
   # outer limits
   if( !is.null(clim_fix) ){
     ratiomat[ratiomat>clim_fix] = clim_fix
@@ -937,7 +945,7 @@ makeHeatmap = function (normmat, ratiomat, attribs, plottitle,
   ah_ls = aheatmap(ratiomat, cexRow=cexRow, 
            color=colorbrew, breaks=colorbreaks,
            annCol=attribs, labCol=colnames(ratiomat),
-           main=plotdata$plottitle)
+           main=plottitle)
 
   return(ah_ls)
 } # end makeHeatmap
