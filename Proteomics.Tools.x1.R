@@ -12,8 +12,9 @@
 # scatterplot      --- X-Y Scatter plot
 # makeMDSplot      --- MDS plot child function called by qc functions
 # makeHeatmap      --- heatmap child function called by qc & design functions
+# getClusterIDsAndRowOrColOrderFromHeatmapCut --- Extract index and cluster ID from heatmap based on a number of branches by which to cut
 #
-# Authors: Theresa Lusardi and Julja Burchard
+# Authors: Theresa Lusardi, Julja Burchard, and Mark Fisher
 # Started - July 2016
 #####################################################################################################
 
@@ -33,6 +34,7 @@ rqd.libraries = function (path) {
   library(NMF) # use aheatmap() function
   library(hexbin)
   library(grid)
+  library(stats)
 #  source("https://bioconductor.org/biocLite.R")
   biocLite("marray")
 
@@ -872,13 +874,15 @@ makeMDSplot = function (normmat, attribs, oneclass, colorspec, plottitle,
 } # end makeMDSplot
 
 
-makeHeatmap = function (normmat, ratiomat, attribs, plottitle, 
+makeHeatmap = function (ratiomat, attribs, plottitle, normmat=NULL,
                         clim.pct=.99, clim_fix=NULL, colorbrew="-PiYG:64", 
-                        cexRow=0.00001, cexCol=min(0.2 + 1/log10(nc), 1.2),
+                        cexRow=0.00001, 
+                        cexCol=min(0.2 + 1/log10(ncol(ratiomat)), 1.2),
                         labcoltype=c("colnames","colnums") ) {
 # This function makes a heatmap of ratio data, displaying experimental design values as tracks
 # Uses the matrix values to cluster the data
-#  normmat:  abundance data matrix, just used to set color limits
+#  normmat:  abundance data matrix, optionally used to set color limits
+#   set to null to use ratiomat for color limits
 #  ratiomat:  ratio data matrix, optimally derived from normmat,
 #    with unique & informative colnames 
 #  attribs:  list of sample classifications to be tracked in clustering
@@ -913,11 +917,17 @@ makeHeatmap = function (normmat, ratiomat, attribs, plottitle,
   if(halfbreak>1){halfbreak=halfbreak-1} # make room for outer limits!
 
   # calculate the color limits 
-  # color limit for plotting: clim.pct percentile of data, divided in half (~dist to med) gets color scale; values outside this range get max color
+  # if normmat is provided: clim.pct percentile of data, divided in half (~dist to med) gets color scale
+  # if no normmat: clim.pct percentile of ratio data gets color scale
+  #    values outside this range get max color
   # inner limit
-  c.lim = quantile( sapply(1:nrow(normmat),
+  if( !is.null(normmat) ){
+    c.lim = quantile( sapply(1:nrow(normmat),
                            function(x){ diff(range( normmat[x,], na.rm=T )) }),
                     probs=clim.pct, na.rm=T)/2
+  } else { 
+    c.lim = quantile( ratiomat, probs=clim.pct )
+  }
   # outer limits
   if( !is.null(clim_fix) ){
     ratiomat[ratiomat>clim_fix] = clim_fix
@@ -937,12 +947,56 @@ makeHeatmap = function (normmat, ratiomat, attribs, plottitle,
   ah_ls = aheatmap(ratiomat, cexRow=cexRow, 
            color=colorbrew, breaks=colorbreaks,
            annCol=attribs, labCol=colnames(ratiomat),
-           main=plotdata$plottitle)
+           main=plottitle)
 
   return(ah_ls)
 } # end makeHeatmap
 
+getClusterIDsAndRowOrColOrderFromHeatmapCut = function(aheatmapObj, numSubTrees, cutByRowLogic=T){
+  #' Return a list of length 2 containing 1) a named vector of cluster IDs when cutting the dendrogram by numSubTrees and 2) a vector of elements in the order as they appear in the dendrogram (left to right for columns and top to bottom for rows).
+  #' 
+  #' @param aheatmapObj an object returned by the aheatmap() function from the NMF package
+  #' @param numSubTrees a numerical argument specifying the number of subclades/subtrees to split the dendrogram row or column into.
+  #' @param cutByRowLogic a boolean specifying whether you want to return cluster IDs and orders for rows (TRUE) or columns (FALSE).
+  #' @return A a list of length 2 containing 1) a named vector of cluster IDs when cutting the dendrogram by numSubTrees and 2) a vector of elements in the order as they appear in the dendrogram (left to right for columns and top to bottom for rows).
+  #' @examples
+  #' normmat = NULL
+  #' ratiomat = structure(c(-2.96024690644889, -4.06755627141134, -4.06803692946931, -2.77516066202756, -2.3541491934163, -3.18372274438139, -3.54400608513984, -2.78184264276148, -2.92538113169742, -1.61792475353981, 5.91468394776209, 8.12930267768699, 8.13026399380293, 7.77558612335568, 7.19659759196695, 7.59271028806334, 7.21374107116286, 7.63694699137847, 7.75409896780803, 5.24352287130755, -2.9544370413132, -4.06174640627565, -4.06222706433362, -5.00042546132812, -4.84244839855065, -4.40898754368195, -3.66973498602302, -4.85510434861699, -4.82871783611061, -3.62559811776774), .Dim = c(10L, 3L), .Dimnames = list(NULL, c("tpmOne", "tpmTwo", "tpmThree")))
+  #' attribs = list(ARPEcellStatus=c(rep("No",1),rep("ARPE",1),rep("No",1)))
+  #' plottitle = "CommonCellTypesInOurImportantTSSs"
+  #' clim.pct = .99
+  #' clim_fix = NULL
+  #' colorbrew = "-PiYG:64"
+  #' cexRow=0.01
+  #' labcoltype=c("colnames","colnums")
+  #' source("abundance_functions.R")
+  #' aheatmapSuberObj = make_heatmap_versatile(ratiomat, colnames(ratiomat), gsub_remove_str='', annotation_mat=as.matrix(data.table(ID=rownames(ratiomat))), annotate_with_gene_names = T, ID_colname="ID", Symbol_colname="ID", save_image_file=T, string_to_lead_file_name_with = "testingFunction", c.lim=NULL, annCol=NULL, main=NULL, reso=1200)
+  #' aheatmapObj = aheatmapSuberObj[[4]]
+  #' png(filename=paste("HighResHeatMap.png",sep=''),width=4.5,height=4.2,units="in",res=1200)
+  #' aheatmapObj = makeHeatmap (normmat=NULL, ratiomat, attribs, plottitle, clim.pct, clim_fix, colorbrew, cexRow=1, cexCol=min(0.2 + 1/log10(nc), 1.2),labcoltype)
+  #' dev.off()
+  #' numSubTrees = 4
+  #' cutByRowLogic = T
+  #' test_ls = getClusterIDsAndRowOrColOrderFromHeatmapCut(aheatmapObj, numSubTrees, cutByRowLogic)
+  #' test_ls$clusterIDByElement
+  #'  #1  2  3  4  5  6  7  8  9 10 
+  #'  #1  2  2  3  3  3  2  3  3  4 
+  #' test_ls$elementOrderByDendrogram
+  #' #[1]  3  2  7  4  9  8  6  5  1 10
 
+  if(cutByRowLogic == TRUE){
+    clusterIDByElement = cutree(as.hclust(aheatmapObj$Rowv), k = numSubTrees)
+    elementOrderByDendrogram = rev(as.hclust(aheatmapObj$Rowv)$order)
+    return_ls = list(clusterIDByElement, elementOrderByDendrogram)
+    names(return_ls) = c("clusterIDByElement", "elementOrderByDendrogram")
+  }else{
+    clusterIDByElement = cutree(as.hclust(aheatmapObj$Colv), k = numSubTrees)
+    elementOrderByDendrogram = as.hclust(aheatmapObj$Colv)$order
+    return_ls = list(clusterIDByElement, elementOrderByDendrogram)
+    names(return_ls) = c("clusterIDByElement", "elementOrderByDendrogram")
+  }
+  return(return_ls)
+}
 
 
 # ******** Code Snippets! ****************************************************************

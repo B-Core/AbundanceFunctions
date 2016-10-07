@@ -52,7 +52,7 @@ FFTopNCellTypesWrapper = function(ff_dt, query_dt, ChrColName, StartColName, Sto
   output_ls = list(Converted_dt, FFtopNcells_lsOfdt_ls)
   names(output_ls) = c(paste0("Data table of query and match output for top ",N," cell types" ), "List of list of data tables output containing actual tpms")
   return(output_ls)
-}
+} #end FFTopNCellTypesWrapper
 
 ConvertFFlsOflsOfDtToDt = function(listOfListOfDataTables_input,N){
   master_dt = NULL
@@ -269,9 +269,9 @@ getTopXCellTypes = function(ff_mat=NULL, chromoNum, range_v, x, colStrWithChromL
 # getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(31,33), N=2, colStrWithChromLocations_str="Annotation")
 # getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(1,3), N=2, colStrWithChromLocations_str="Annotation")
 # getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(10000,10030), N=2, colStrWithChromLocations_str="Annotation")
-ffDummy_dt = data.table(Annotation=c("chr10:10..20,-", "chr10:25..30,-","chr10:35..100,-","chr10:106..205,-","chr10:223..250,-","chr10:269..478,-","chr10:699..1001,-","chr10:2000..2210,-","chr10:2300..2500,-","chr10:2678..5678,-"),tpmOne=c(0,0,0.213,1,1.2,0.5,0.7,0.9,0.8,0.86), tpmTwo=c(100,1000,1001,1500,900,877,1212,1232,1312,0),tpmThree=c(0.2138595,0,0,0,0,0,0.6415786,0,0,0))
-query_dt = data.table(chrP = c(10,10,10,10,11), startP = c(1,31,1,10000,1), stopP=c(10000,33,3,10030,100))
-FFTopNCellTypesWrapper(ff_dt = ffDummy_dt, query_dt = query_dt, ChrColName = "chrP", StartColName ="startP", StopColName = "stopP", N = 2, savePath = "~/Desktop/", colStrWithChromLocations_str="Annotation")
+# ffDummy_dt = data.table(Annotation=c("chr10:10..20,-", "chr10:25..30,-","chr10:35..100,-","chr10:106..205,-","chr10:223..250,-","chr10:269..478,-","chr10:699..1001,-","chr10:2000..2210,-","chr10:2300..2500,-","chr10:2678..5678,-"),tpmOne=c(0,0,0.213,1,1.2,0.5,0.7,0.9,0.8,0.86), tpmTwo=c(100,1000,1001,1500,900,877,1212,1232,1312,0),tpmThree=c(0.2138595,0,0,0,0,0,0.6415786,0,0,0))
+# query_dt = data.table(chrP = c(10,10,10,10,11), startP = c(1,31,1,10000,1), stopP=c(10000,33,3,10030,100))
+# FFTopNCellTypesWrapper(ff_dt = ffDummy_dt, query_dt = query_dt, ChrColName = "chrP", StartColName ="startP", StopColName = "stopP", N = 2, savePath = "~/Desktop/", colStrWithChromLocations_str="Annotation")
 
 # numericPartOfFf_mat = data.matrix(ffDummy_dt[,grep('tpm', colnames(ffDummy_dt)),with=F])
 # ffRanks_mat = matrix(nrow=(nrow(numericPartOfFf_mat)), ncol=length(grep('tpm', colnames(ffDummy_dt))))
