@@ -5,10 +5,11 @@
 # maplot           --- A plain vanilla MA plot with loess fit line
 # hex.maplot       --- A 2D MA plot. Needs refinement.
 # summary.plots    --- Creates box, scatter, density and SD/mean plots
-# qc.clusters      --- Plot heatmap and MDS - cuts data with small SD
-#                  --- Needs some generalization for multiple variables
+# qc.clusters      --- Plot heatmap and MDS for abundance data
+#                  --- Makes avg-all ratios for heatmap, drops small SD rows
 # qcQvalue         --- Plot p-value histogram, q-value auto-qc & MDS w q-cut
-# designRatios     --- Calculate ratios based on expt design, MDS plot & heatmap
+# designRatios     --- Calculate ratios based on expt design
+# plotRatios       --- Plot heatmap and MDS for ratio data
 # scatterplot      --- X-Y Scatter plot
 # makeMDSplot      --- MDS plot child function called by qc functions
 # makeHeatmap      --- heatmap child function called by qc & design functions
@@ -133,7 +134,7 @@ hex.maplot = function (comp1, comp2, c12names, yrange = FALSE, plot2file = FALSE
 
 }
 
-# ******** Summary ****************************************************************
+# ******** Summary *************************************************************
 summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, colorspec, plotdata, plot2file = FALSE, histbins = 40, expand.2D = 5, filesep="/", plotIDOffset = 0) {
 # rawmat is the matrix of raw data. Should have any background addition and
 #  be scaled according to normalized data
@@ -317,7 +318,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
 
 }
 
-# ******** Heatmap ****************************************************************
+# ******** Abundance QC MDS & Heatmap ******************************************
 qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
                         colorspec, center = 'norm', clim.pct, mask = NULL, 
                         plot2file = FALSE, filesep='/') {
@@ -507,13 +508,10 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
 
 
 # ******** Ratios by experimental design ***************************************
-designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
-                         q_list=NULL, cut_ls=NULL, 
-                         clim.pct=0.99, clim_fix=NULL, 
-                         plot2file = FALSE, filesep='/', 
-                         cexRow=0.00001, png_res=300) {
-# This is intended to display differential expression after feature selection
-# It will create a heatmap of ratios based on experimental design
+designRatios = function (normmat, attribs, ratioby_ls, 
+                         q_list=NULL, cut_ls=NULL) { 
+# This is intended to calculate differential expression after feature selection
+# It will create ratios based on experimental design
 # normmat: matrix of experimental data in columns (with headers!)
 # attribs: list of sample classifications to be tracked in clustering
 #   each list element contains a string vector with one label per sample
@@ -541,16 +539,6 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
 #   rcut_fold = linear scale number for min best abs ratio required
 #   icut_fold = linear scale number for mean fold above min(normmat) required
 #   => include elements to execute cuts; omit to skip
-# plotdata: list of info relevant to labeling and saving the plot
-#   plotdir:  plot destination directory
-#   plotbase:  base filename for the plot
-#   plottitle:  title for all plots
-#  clim.pct:  0:1 - fraction of data to limit max color
-#  clim_fix: if set, max abs ratio to show; data>clim_fix are shown as clim_fix
-#  cexRow: rowlabel size for heatmap, set to ~invisible by default
-#  png_res: resolution of saved png files in dpi; default 300
-
-  require(NMF)
 
   # arguments
 
@@ -579,12 +567,6 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
     qflagF = "qtop"
   }
 
-  # test plotdir for filesep; add if absent
-  if( !grepl(paste0(filesep,'$'),plotdata$plotdir) ){
-    plotdata$plotdir = paste0(plotdata$plotdir,filesep)
-  }
-
-  
   # calculate ratios based on experimental design
 
   # parse design in attribs and ratioby_ls
@@ -594,7 +576,7 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
     if( length(ratioby_ls[[fac]]) < length(unique(attribs[[fac]])) ){
       # this is the level to use as baseline/reference
       refmk = refmk & attribs[[fac]] == ratioby_ls[[fac]]
-      oneclass = fac # MDS plot will be colored by this
+      oneclass = fac # MDS plot should be colored by this
     } else {
       # this is a factor by which to divide the data before ratioing
       splitby_ls = c(splitby_ls,attribs[fac])
@@ -717,20 +699,80 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
   message(sprintf('selected rows = %s, !selected rows = %s',
                    sum(rowmask), sum(!rowmask)))
 
+
+  # return processed data
+  invisible( list(ratiomat=ratiomat, rowmask=rowmask, oneclass=oneclass) )
+
+
+} # end designRatios
+
+
+# ******** MDS & Heatmap plots for ratios **************************************
+plotRatios = function (ratiomat, attribs, oneclass, plotdata, colorspec, 
+                       rowmask=NULL, tag="selected",
+                       NAtol=ncol(ratiomat)/2, SDtol=0.01, 
+                       clim.pct=0.99, clim_fix=NULL, 
+                       plot2file = FALSE, filesep='/', 
+                       cexRow=0.00001, png_res=300) {
+# This is intended to display differential expression 
+# It will create a heatmap of ratios and an MDS plot from the same ratios
+# ratiomat: matrix of ratio data in columns (with headers!)
+# rowmask: optional mask of rows to plot
+#   default is to create an all-TRUE rowmask of length nrow(ratiomat)
+# NAtol: max number of NAs tolerated; rows with more are masked out
+# SDtol: min SD within row tolerated; rows with less are masked out
+# attribs: list of sample classifications to be tracked in clustering
+#   each list element contains a string vector with one label per sample
+# tag: word or phrase to indicate what's special about _these_ ratios
+# oneclass: string name of attribs element to be used in MDS plot
+# plotdata: list of info relevant to labeling and saving the plot
+#   plotdir:  plot destination directory
+#   plotbase:  base filename for the plot
+#   plottitle:  title for all plots
+#  colorspec is a vector of color specifiers for colorRampPalette  
+#  clim.pct:  0:1 - fraction of data to limit max color
+#  clim_fix: if set, max abs ratio to show; data>clim_fix are shown as clim_fix
+#  cexRow: rowlabel size for heatmap, set to ~invisible by default
+#  png_res: resolution of saved png files in dpi; default 300
+
+  # imports
+  require(NMF)
+
+  # arguments
+
+  # test plotdir for filesep; add if absent
+  if( !grepl(paste0(filesep,'$'),plotdata$plotdir) ){
+    plotdata$plotdir = paste0(plotdata$plotdir,filesep)
+  }
+
+  # check for rowmask; create if NULL
+  if( is.null(rowmask) ){
+    rowmask = logical(nrow(ratiomat)); rowmask[]= TRUE
+  }
+  # adjust rowmask if needed to keep problem rows out of plots
+  NAmask = rowSums(is.na(ratiomat)) <= NAtol
+  SDmask = sapply(1:nrow(ratiomat), 
+                  function(x){sd(ratiomat[x,],na.rm=T)}) >= SDtol
+  SDmask[ is.na(SDmask) ] = FALSE # in case of all-NA rows
+  rowmask = rowmask & NAmask & SDmask
+  # report selection size
+  message(sprintf('selected rows = %s, excess NA rows = %s, low SD rows = %s',
+                   sum(rowmask), sum(!NAmask), sum(!SDmask) ))
+
   plotID = '5q1'
-  plotDesc = 'Heatmap_selected' 
+  plotDesc = paste('Heatmap', tag, sep="_")
   if(plot2file) {
   png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc), width=5,height=7,units="in",res=png_res)
   }
 
   # plot heatmap
-  ah_ls = makeHeatmap(normmat=normmat[rowmask,], ratiomat=ratiomat[rowmask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct, clim_fix=clim_fix, cexRow=cexRow)
+  ah_ls = makeHeatmap( ratiomat=ratiomat[rowmask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct, clim_fix=clim_fix, cexRow=cexRow)
   
   if(plot2file) dev.off()
 
 
   plotID = '6q1'
-  plotDesc = 'MDS_selected' 
+  plotDesc = paste('MDS', tag, sep="_") 
   if(plot2file) {
   png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc), width=5.4,height=5.4,units="in",res=png_res)
   }
@@ -742,8 +784,9 @@ designRatios = function (normmat, attribs, ratioby_ls, plotdata, colorspec,
 
 
   # return processed data
-  invisible( list(ratiomat=ratiomat, rowmask=rowmask, ah_ls=ah_ls, obj_MDS=obj_MDS) )
-} # end designRatios
+  invisible( list( ah_ls=ah_ls, obj_MDS=obj_MDS) )
+  
+}
 
 
 # ******** Scatter ****************************************************************
@@ -926,7 +969,7 @@ makeHeatmap = function (ratiomat, attribs, plottitle, normmat=NULL,
                            function(x){ diff(range( normmat[x,], na.rm=T )) }),
                     probs=clim.pct, na.rm=T)/2
   } else { 
-    c.lim = quantile( ratiomat, probs=clim.pct )
+    c.lim = quantile( ratiomat, probs=clim.pct, na.rm=T )
   }
   # outer limits
   if( !is.null(clim_fix) ){
@@ -952,6 +995,7 @@ makeHeatmap = function (ratiomat, attribs, plottitle, normmat=NULL,
   return(ah_ls)
 } # end makeHeatmap
 
+
 getCidFromHeatmap = function(aheatmapObj, numSubTrees, cutByRowLogic=T){
   # Return a list of length 2 containing 1) a named vector of cluster IDs when cutting the dendrogram by numSubTrees and 2) a vector of elements in the order as they appear in the dendrogram (left to right for columns and top to bottom for rows).
   # 
@@ -970,7 +1014,7 @@ getCidFromHeatmap = function(aheatmapObj, numSubTrees, cutByRowLogic=T){
   # cexRow=0.01
   # labcoltype=c("colnames","colnums")
   # source("abundance_functions.R")
-  # aheatmapObj = makeHeatmap (normmat=NULL, ratiomat, attribs, plottitle, clim.pct, clim_fix, colorbrew, cexRow=1, cexCol=min(0.2 + 1/log10(ncol(ratiomat)), 1.2),labcoltype)
+  # aheatmapObj = makeHeatmap (normmat=NULL, ratiomat=ratiomat, attribs=attribs, plottitle=plottitle, clim.pct=clim.pct, colorbrew=colorbrew, cexRow=cexRow, labcoltype=labcoltype)
   # numSubTrees = 4
   # cutByRowLogic = T
   # test_ls = getCidFromHeatmap(aheatmapObj, numSubTrees, cutByRowLogic)
