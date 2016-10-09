@@ -214,6 +214,7 @@ regressMatrix = function(normmat, expt.design, lm_expression,
   # function to run linear regression on multiresponse data matrix with given model and optional contrasts
   # Arguments
   # normmat: a matrix of normalized (sample-bias-reduced) abundance data
+  #  !! All rows containing NAs MUST be removed before running regression !!
   #  rownames are unique identifiers for features measured per row
   #  colnames are unique identifiers for samples
   # expt.design: a named list of character vectors, each vector having one element per sample in raw.mat column order, each string representing a design factor OR covariate in the conduct of the experiment
