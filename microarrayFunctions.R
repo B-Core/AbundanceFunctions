@@ -7,12 +7,12 @@
 # Started - October, 2016
 #####################################################################################################
 
-#Depends on rqd.libraries from Proteomics.Tools.x1.R
-library(oligo)
-library(affy)
+##Proteomics.Tools.x1.R for calling proper libraries
+source("Proteomics.Tools.x1.R")
 
 convertCELtoNonNormMat = function(pathToCELfiles){
-  #' Read in CEL files from a directory argument, using the oligo package first and then, failing that, trying the affy package instead. Requires the relevent array package to be installed from BioConductor before run.
+  #' Read in CEL files from a directory argument, using the oligo package first and then, failing that, trying the affy package instead. Requires the relevent array package to be installed from BioConductor before run. Not sure of a good strategy for installing these if they haven't already been. Also want more sophistocated error handling here, but SO recommends against nested tryCatches(), because they don't work as expected:
+  #' http://stackoverflow.com/questions/35716394/nested-try-catch-in-r
   #' 
   #' @param pathToCELfiles a string containing the path to the directory containing 
   #' @return A matrix with rownames and colnames that contains non-normalized intensities for each probe in a given array
