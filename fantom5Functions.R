@@ -5,16 +5,15 @@
 # ConvertFFlsOflsOfDtToDt   --- Generate a data.table with N+2 columns. The first column ("query_info") contains the chromosome, start, and stop positions of the query, separated by underscore delimiters. The second column ("match_info") contains the chromosome, start, and stop position of the INTERSECT region of the query position and any match within ff_dt. It also includes the original column name of its match in ff_dt following an "OriginalColName" string and an underscore delimiter. Failing a match, the match_info column will report the entire position of the nearest ff_dt TSS. If there are two nearest ff_dt TSSs, two separate matches will be reported, each reporting the entire position of its ff_dt TSS. Note that the query position may intersect more than one ff_dt TSS. In this case, each intersect will be reported as a separate row in the output. The output data.table will therefore have nrow() >= nrow(query_dt).
 # getSortedDTwithSplitOfFirstCol       --- Generate and return a data table of the fantom5 hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt data SORTED numerically by numeric() chromosome number and THEN by Start position
 # generateLg2RatioToAveAllMat --- Generate and return a matrix containing log2-scale ratios to average all for the numerical portion of the fantom5 data
-# fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID    --- C
-# getTopNCellTypesDtVersionWithOutOfRangeReturns      --- P
-# getTopXCellTypes         --- P
+# fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID    --- Generates a list of matrices of entries with log2-fold ratios greater than x (or abs(log2(ratio)>x)), one element for each query/fantom5 ontology ID.
+# getTopNCellTypesDtVersionWithOutOfRangeReturns      --- Generates list of data.tables with each element of the list named with the intersection of query and ff_dt as well as original ff_dt position information. Each data.table in the list contains the cell type/sample info. in rank order from 1:N in decreasing order, as well as the tpm count corresponding to it.
 #
 # Author: Mark Fisher
 # Started - October, 2016
 #####################################################################################################
 
 
-FFTopNCellTypesWrapper = function(ff_dt, query_dt, ChrColName, StartColName, StopColName, N, savePath, colStrWithChromLocations_str="00Annotation"){ #, queryDtENSRidColName="ENSRid", queryDtRegDescriptionColName="gwasEnsemblRegDescription", queryDtVarLenAcrossENSRidColName="VarLenAcrossENSRid_x"){
+FFTopNCellTypesWrapper = function(ff_dt, query_dt, ChrColName, StartColName, StopColName, N, savePath, colStrWithChromLocations_str="00Annotation", ffDtPath=NULL, optRankMatPath=NULL){ #, queryDtENSRidColName="ENSRid", queryDtRegDescriptionColName="gwasEnsemblRegDescription", queryDtVarLenAcrossENSRidColName="VarLenAcrossENSRid_x"){
   #' Wrap the output of getTopNCellTypesDtVersionWithOutOfRangeReturns over a data.table of queries instead of one at a time and convert the output of that function into a data.table of cell type/sample names instead of the list of list of data.tables using the ConvertFFlsOflsOfDtToDt function.
   #' 
   #' @param ff_dt a data table of hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt or any version or subset thereof as defined by user. If no data.table is provided, the function will look for the hard-coded path in exacloud.
@@ -24,17 +23,43 @@ FFTopNCellTypesWrapper = function(ff_dt, query_dt, ChrColName, StartColName, Sto
   #' @param StopColName a string containing the name() of the column in query_dt containing the stop position information.
   #' @param N a numeric() argument the retreives the top N largest tpm-containing columns in a given row of ff_dt
   #' @param savePath a string that specifies the destination directory for the two return items (a data table and list of list of data tables)
+  #' @param ffDtPath an optional path provided by the user to supply the fantom5 tpm data.
+  #' @param optRankMatPath Importantly, the RankMat MUST be sorted by chromosome and then by start position!
   #' @return A list containing two elements: 1) a data table with ncol() N+2. The first column ("query_info") contains the chromosome, start, and stop positions of the query, separated by underscore delimiters. The second column ("match_info") contains the chromosome, start, and stop position of the INTERSECT region of the query position and any match within ff_dt. It also includes the original column name of its match in ff_dt following an "OriginalColName" string and an underscore delimiter. Failing a match, the match_info column will report the entire position of the nearest ff_dt TSS. If there are two nearest ff_dt TSSs, two separate matches will be reported, each reporting the entire position of its ff_dt TSS. Note that the query position may intersect more than one ff_dt TSS. In this case, each intersect will be reported as a separate row in the output. The output data.table will therefore have nrow() >= nrow(query_dt). 2) A list of list of data tables. The length() of the list will be nrow(query_dt). Each element of the list will contain a list of data tables, where each element of this list will represent one match (as previously mentioned, there will always be at least one "match"--direct or nearest--and sometimes more than one match). Each match will correspond to a data.table with nrow()=1 and ncol()=N. The names() of the data.table will correspond to the cell types/samples in ff_dt, and the entries in the table will be tpm counts from ff_dt, sorted from highest to lowest. If a chromosome number in the query data table doesn't match a chromosome number in ff_dt, it simply gets skipped.
   #' @examples
+  #' require(data.table)
   #' ffDummy_dt = data.table(Annotation=c("chr10:10..20,-", "chr10:25..30,-","chr10:35..100,-","chr10:106..205,-","chr10:223..250,-","chr10:269..478,-","chr10:699..1001,-","chr10:2000..2210,-","chr10:2300..2500,-","chr10:2678..5678,-"),tpmOne=c(0,0,0.213,1,1.2,0.5,0.7,0.9,0.8,0.86), tpmTwo=c(100,1000,1001,1500,900,877,1212,1232,1312,0),tpmThree=c(0.2138595,0,0,0,0,0,0.6415786,0,0,0))
   #' q_dt = data.table(chrP = c(10,10,10,10,11), startP = c(1,31,1,10000,1), stopP=c(10000,33,3,10030,100))
   #' output_ls = FFTopNCellTypesWrapper(ff_dt = ffDummy_dt, query_dt = q_dt, ChrColName = "chrP", StartColName ="startP", StopColName = "stopP", N = 2, savePath = "~/Desktop/", colStrWithChromLocations_str="Annotation")
+  #' output2_ls = FFTopNCellTypesWrapper(ff_dt = ffDummy_dt, query_dt = q_dt, ChrColName = "chrP", StartColName ="startP", StopColName = "stopP", N = 2, savePath = "~/Desktop/", colStrWithChromLocations_str="Annotation", optRankMatPath="/home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/ProcessedAndUsefulFiles/AllFFEntriesRankedSortedWithParsedCols.txt") #Attn test this
+  #' optRank_dt = getSortedDTwithSplitOfFirstCol(copy(ffDummy_dt),"Annotation")
+  #' numericPartOfFf_mat = data.matrix(optRank_dt[,grep('tpm', names(optRank_dt)),with=F])
+  #' ffRanks_mat = matrix(nrow=(nrow(numericPartOfFf_mat)), ncol=length(grep('tpm', colnames(ffDummy_dt))))
+  #' colnames(ffRanks_mat) = colnames(numericPartOfFf_mat)[grep('tpm', colnames(numericPartOfFf_mat))]
+  #' for (r in 1:nrow(numericPartOfFf_mat)){
+  #'   ffRanks_mat[r,] = rank(-numericPartOfFf_mat[r,], na.last = T)
+  #' }
+  #' optRank_Mat = ffRanks_mat
+  #' optRank_Mat = rbind(colnames(optRank_Mat), optRank_Mat)
+  #' optRank_Mat = cbind(c("Fantom5ID",ffDummy_dt[["Annotation"]]),optRank_Mat)
+  #' write.table(optRank_Mat,file="~/Git_repos/AbundanceFunctions/testRankMat.txt", sep="\t",row.names = F, col.names = F)
+  #' ffDummy_dt = data.table(Annotation=c("chr10:10..20,-", "chr10:25..30,-","chr10:35..100,-","chr10:106..205,-","chr10:223..250,-","chr10:269..478,-","chr10:699..1001,-","chr10:2000..2210,-","chr10:2300..2500,-","chr10:2678..5678,-"),tpmOne=c(0,0,0.213,1,1.2,0.5,0.7,0.9,0.8,0.86), tpmTwo=c(100,1000,1001,1500,900,877,1212,1232,1312,0),tpmThree=c(0.2138595,0,0,0,0,0,0.6415786,0,0,0))
+  #' sortedFF_dt = getSortedDTwithSplitOfFirstCol(copy(ffDummy_dt),"Annotation")
+  #' output3_ls = FFTopNCellTypesWrapper(ff_dt = ffDummy_dt, query_dt = q_dt, ChrColName = "chrP", StartColName ="startP", StopColName = "stopP", N = 2, savePath = "~/Desktop/", colStrWithChromLocations_str="Annotation", optRankMatPath="~/Git_repos/AbundanceFunctions/testRankMat.txt") #Attn test this
   
+  require(data.table)
   
-  #If ff_dt was not provided, try to load it from its home in exacloud #Attn hardcoded
-  if(is.null(ff_dt)){ #unchecked
-    require(data.table)
-    ff_dt = fread("grep -v '^#' /home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt")
+  #If ff_dt was not provided, to load it from user-provided path
+  if(is.null(ff_dt)){ 
+    ff_dt = fread(ffDtPath)
+  }
+  
+  #If ranked matrix was provided for speed, load it
+  if(!is.null(optRankMatPath)){
+    Rank_mat = as.matrix(fread(optRankMatPath))
+    optRank_MatInst = Rank_mat
+  }else{
+    optRank_MatInst = NULL
   }
   
   #Check that ff_dt and query_dt are data.tables. If not, try to coerce them to data.tables
@@ -43,11 +68,14 @@ FFTopNCellTypesWrapper = function(ff_dt, query_dt, ChrColName, StartColName, Sto
     query_dt = as.data.table(query_dt)
   }
   
+  #Sort the ff_dt once before passing through getTopNCellTypesDtVersionWithOutOfRangeReturns loop
+  ffSortedInst_dt = getSortedDTwithSplitOfFirstCol(ff_dt=copy(ff_dt), nameOfCol1=colStrWithChromLocations_str)
+  
   #Initiate and populate the list of list of data.tables
   FFtopNcells_lsOfdt_ls = list()
   for(r in 1:nrow(query_dt)){
     if(r%%50==0) {print(r)} #print r every 50th iteration of the loop to reassure an eager analyst
-    FFtopNcells_lsOfdt_ls[[r]] = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=as.numeric(query_dt[r,get(ChrColName)]), range_v=c(as.numeric(query_dt[r,get(StartColName)]),as.numeric(query_dt[r,get(StopColName)])), N=N, colStrWithChromLocations_str=colStrWithChromLocations_str)
+    FFtopNcells_lsOfdt_ls[[r]] = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=as.numeric(query_dt[r,get(ChrColName)]), range_v=c(as.numeric(query_dt[r,get(StartColName)]),as.numeric(query_dt[r,get(StopColName)])), N=N, colStrWithChromLocations_str=colStrWithChromLocations_str, optRank_Mat=optRank_MatInst, ffSorted_dt=ffSortedInst_dt)
     
     #if the r-th element of the list was successfully populated (it wouldn't be if, say, there was no chromosome number in ff_dt that matched the query), let's go ahead and give that element a name
     if(length(FFtopNcells_lsOfdt_ls) ==r){
@@ -83,7 +111,7 @@ ConvertFFlsOflsOfDtToDt = function(listOfListOfDataTables_input,N){
   #' output_ls = FFTopNCellTypesWrapper(ff_dt = ffDummy_dt, query_dt = q_dt, ChrColName = "chrP", StartColName ="startP", StopColName = "stopP", N = 2, savePath = "~/Desktop/", colStrWithChromLocations_str="Annotation")
   #' listOfListOfDataTables_ls = output_ls[[2]]
   #' Converted_dt = ConvertFFlsOflsOfDtToDt(listOfListOfDataTables_ls,N)
-   
+  
   #Start with empty data.table
   master_dt = NULL
   
@@ -189,21 +217,24 @@ generateLg2RatioToAveAllMat = function (ff_DtOrMat){
   return(lg2Ratio_mat)
 }
 
-fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_mat, x, onlyOverExprs=T){
+fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_mat, x, onlyOverExprs=T, TSSidColStr ="00Annotation" , EntrezIDcolStr="entrezgene_id"){
   #' For each fantom5 ontology ID or query string of interest in ffID_v, generates a matrix of just entries with log2-fold ratios greater than x (or abs(log2(ratio)>x)), decorated with chromosome, start position, stop position, entrezID, and description. If no entries match at the >x (or abs()>x) threshold, populate that matrix with NULL. Assembles these matrices into a list and returns the list.
   #' 
   #' @param ffID_v a vector containing keywords or -even better- fantom5 ontology IDs by which to narrow the search for 
-  #' @param ff_mat a matrix
+  #' @param ff_mat a matrix version of the fantom5 tpm count data (hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt). Importantly, the 1st column must be the fantom5 TSS identifier containing positional information and there must be a column containing entrezgene_id.
   #' @param onlyOverExprs a boolean specifying whether the user wants to inspect only over-expressed
   #' @param x a number representing the desired log2-fold over- and possibly under-expression desired
+  #' @param TSSidColStr a string containing the column name of the TSS ID column of ff_mat (default is "00Annotation")
+  #' @param EntrezIDcolStr a string containing the column name of the entrez ID column of ff_mat (default is "entrezgene_id")
   #' @return a list of matrices, one matrix per list element, of just entries with log2-fold ratios greater than x (or abs(log2(ratio)>x)), decorated with chromosome, start position, stop position, entrezID, and description.
   #' 
   #' @examples
-  #' #Attn add entrezID to 5th column of ffDummy_mat
-  #' ffDummy_mat = as.matrix(data.table(Annotation=c("chr10:10..20,-", "chr10:25..30,-","chr10:35..100,-","chr10:106..205,-","chr10:223..250,-","chr10:269..478,-","chr10:699..1001,-","chr10:2000..2210,-","chr10:2300..2500,-","chr10:2678..5678,-", "chr12:2678..5678,-"),tpmOne=c(0,0,0.213,1,1.2,0.5,0.7,0.9,0.8,0.86,0), tpmTwo=c(100,1000,1001,1500,900,877,1212,1232,1312,0,3),tpmThree=c(0.2138595,0,0,0,0,0,0.6415786,0,0,0,3), entrezID=c("ID1","ID2","ID3","ID4","ID5","ID6","ID7","ID8","ID9","ID10","ID11"),description=c("Description1","Description2","Description3","Description4","Description5","Description6","Description7","Description8","Description9","Description10","Description11")))
+  #' ffDummy_mat = as.matrix(data.table(Annotation=c("chr10:10..20,-", "chr10:25..30,-","chr10:35..100,-","chr10:106..205,-","chr10:223..250,-","chr10:269..478,-","chr10:699..1001,-","chr10:2000..2210,-","chr10:2300..2500,-","chr10:2678..5678,-", "chr12:2678..5678,-"),tpmOne=c(0,0,0.213,1,1.2,0.5,0.7,0.9,0.8,0.86,0), tpmTwo=c(100,1000,1001,1500,900,877,1212,1232,1312,0,3),tpmThree=c(0.2138595,0,0,0,0,0,0.6415786,0,0,0,3), entrezID=c("ID:1","ID:2","ID:3","ID:4","ID:5","ID:6","ID7","ID:8","ID:9","ID:10","ID:11"),description=c("Description1","Description2","Description3","Description4","Description5","Description6","Description7","Description8","Description9","Description10","Description11")))
   #' ffID_v1 = c("Two", "Three")
+  #' EntrezIDcolStr1= "entrezID"
+  #' TSSidColStr1 = "Annotation"
   #' x_var = 3
-  #' hits_ls = fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID(ffID_v=ffID_v1, ff_mat=ffDummy_mat, x=x_var, onlyOverExprs=T)
+  #' hits_ls = fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID(ffID_v=ffID_v1, ff_mat=ffDummy_mat, x=x_var, onlyOverExprs=T,TSSidColStr=TSSidColStr1,EntrezIDcolStr=EntrezIDcolStr1)
   
   lg2Ratio_mat = generateLg2RatioToAveAllMat(ff_mat)
   
@@ -224,10 +255,10 @@ fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_m
       logRatio_mat = lg2Ratio_mat[HighExprsInColOfInterestLogic_v,grep(ffID, colnames(lg2Ratio_mat)),drop=F]
       
       #parse the identifier column of ff_mat
-      splits_ls = lapply(ff_mat[HighExprsInColOfInterestLogic_v,1,drop=F], function(x) unlist(strsplit(x,':|\\.+|,'))[1:3]) #Attn don't use number
+      splits_ls = lapply(ff_mat[HighExprsInColOfInterestLogic_v,TSSidColStr,drop=F], function(x) unlist(strsplit(x,':|\\.+|,'))[1:3])
       splits_mat = matrix(unlist(splits_ls), nrow=length(splits_ls), byrow = T)
       
-      entrezIDsplit_ls = lapply(ff_mat[HighExprsInColOfInterestLogic_v, 5, drop=F], function(x) unlist(strsplit(x,':'))[2]) #Attn don't use number
+      entrezIDsplit_ls = lapply(ff_mat[HighExprsInColOfInterestLogic_v, EntrezIDcolStr, drop=F], function(x) unlist(strsplit(x,':'))[2])
       entrezID_mat = matrix(unlist(entrezIDsplit_ls), nrow=length(entrezIDsplit_ls), byrow = T)
       description_mat = ff_mat[HighExprsInColOfInterestLogic_v, "description", drop=F]
       logRatioJoin_mat = cbind(splits_mat,entrezID_mat,description_mat, logRatio_mat)
@@ -239,64 +270,111 @@ fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID = function(ffID_v, ff_m
   return(hit_ls)
 } #END fetchTssRangesWithXFoldOverUnderExpressionInFFOntologyID
 
-getTopNCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt,chromoNum, range_v, N, colStrWithChromLocations_str="00Annotation") {
-  #' LEFT OFF HERE
+getTopNCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt=NULL,chromoNum, range_v, N, colStrWithChromLocations_str="00Annotation", ffDtPath=NULL, ffOntIdInstead=F, optRank_Mat=NULL, optURLdecode=F, ffSorted_dt=NULL) {
+  #' Takes as input a genome position (chr,Start,Stop), looks for entries in ff_dt with an intersect with the query, and returns the top N tpm columns FOR EACH hit as a separate data.table. In other words, the output is a LIST of data.tables. If no matching entries are found, the function will search for the nearest entry and return the top N tpm columns of that. If there are two nearest neighbors, both will be returned.
   #' 
   #' @param ff_dt a data table of hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt or any version or subset thereof as defined by user.
-  #' @param nameOfCol1 a string matching the column in ff_dt that contains the TSS ID information (e.g., "chr10:10..20,-"). This function will parse out the chromosome, start, and stop.
-  #' @return A data.table of fantom5 hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt data SORTED numerically by numeric() chromosome number and THEN by Start position
+  #' @param chromoNum a numerical or string of the chromosome (nb NOT "chr1", but "1") of the query position.
+  #' @param range_v range_v a numeric() vector containing the Start and Stop bp position of the query (e.g., range_v = c(100,123))
+  #' @param N a numeric() argument that retreives the top N largest tpm-containing columns in a given row of ff_dt
+  #' @param colStrWithChromLocations_str a string containing the column name of the annotation column of ff_dt (i.e., the column that contains TSS positional information). In ff_dt, note that the position information needs to be parsed out, which this function('s dependency) does automatically. Default is "00Annotation".
+  #' @param ffDtPath is a string containing the path to ff_dt if 
+  #' @param ffOntIdInstead a boolean designating whether the users wants to substitute the full URL names of the cell types/samples with just the fantom5 ontology IDs instead.
+  #' @param optRank_Mat an optional matrix containing the ranked values of all of the fantom5 tpm entries. Most useful and time-saving if lots of calls to the sort() function expected (i.e., if lots of hits are expected or if this function is being called in a for loop as with FFTopNCellTypesWrapper).
+  #' @param optURLdecode a boolean designating whether the user wants to apply a URL-decoder function on the colnames of topCells_dt (i.e., on the column names of the sorted/ranked cell types/samples)
+  #' @param ffSorted_dt an optional data.table containing ff_dt sorted by chromosome and then by start position. Most useful and time-saving if lots of calls to the sort() function expected (i.e., if lots of hits are expected or if this function is being called in a for loop as with FFTopNCellTypesWrapper).
+  #' @return A list of data.tables with each element of the list named with the intersection of query and ff_dt as well as original ff_dt position information. Each data.table in the list contains the cell type/sample info. in rank order from 1:N in decreasing order, as well as the tpm count corresponding to it.
   #' @examples
   #' ffDummy_dt = data.table(Annotation=c("chr10:10..20,-", "chr10:25..30,-","chr10:35..100,-","chr10:106..205,-","chr10:223..250,-","chr10:269..478,-","chr10:699..1001,-","chr10:2000..2210,-","chr10:2300..2500,-","chr10:2678..5678,-", "chr12:2678..5678,-"),tpmOne=c(0,0,0.213,1,1.2,0.5,0.7,0.9,0.8,0.86,0), tpmTwo=c(100,1000,1001,1500,900,877,1212,1232,1312,0,3),tpmThree=c(0.2138595,0,0,0,0,0,0.6415786,0,0,0,3))
+  #' names(ffDummy_dt) = c("Annotation", "tpmOne","tpmTwo.CNhs10619.10014-101C5", "tpmThree")
+  #' cNum = 10
+  #' rng_vec = c(1,1000)
+  #' topN = 2
+  #' ChromLocCol_str = "Annotation"
+  #' test1 = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=cNum, range_v=rng_vec, N=topN, colStrWithChromLocations_str=ChromLocCol_str, ffDtPath=NULL,ffOntIdInstead=F)
+  #' test1.2 = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=cNum, range_v=rng_vec, N=topN, colStrWithChromLocations_str=ChromLocCol_str, ffDtPath=NULL,ffOntIdInstead=T)
+  #' test1.3 = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=cNum, range_v=rng_vec, N=topN, colStrWithChromLocations_str=ChromLocCol_str, ffDtPath=NULL,ffOntIdInstead=T, optRankMatPath="/home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/ProcessedAndUsefulFiles/AllFFEntriesRanked.txt")
+  #' ##Test with chromoNum as "X"##
+  #' ffDummy_dt = data.table(Annotation=c("chr10:10..20,-", "chr10:25..30,-","chrX:35..100,-","chr10:106..205,-","chr10:223..250,-","chr10:269..478,-","chr10:699..1001,-","chr10:2000..2210,-","chr10:2300..2500,-","chr10:2678..5678,-", "chr12:2678..5678,-"),tpmOne=c(0,0,0.213,1,1.2,0.5,0.7,0.9,0.8,0.86,0), tpmTwo=c(100,1000,1001,1500,900,877,1212,1232,1312,0,3),tpmThree=c(0.2138595,0,0,0,0,0,0.6415786,0,0,0,3))
+  #' cNum = "X"
+  #' test2 = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=cNum, range_v=rng_vec, N=topN, colStrWithChromLocations_str=ChromLocCol_str, ffDtPath=NULL)
+  #' ##Test with no ff_dt provided## #Attn
+  #' test3 = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=NULL,chromoNum=cNum, range_v=rng_vec, N=topN, colStrWithChromLocations_str="00Annotation", ffDtPath="grep -v '^#' /Users/fishema/Git_repos/AbundanceFunctions/hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt")
+  #' #Attn still need to test with URLdecode function, once that's written
+  #' #Attn test on the battery of calls at the end of this script
   
-  #Takes as input a genome position (chr,Start,Stop), looks for entries in ff_dt with an intersect with the query, and returns the top N tpm columns FOR EACH hit as a separate data.table. 
-  #In other words, the output is a LIST of data.tables.
-  #If no matching entries are found, the function will search for the nearest entry and return the top N tpm columns of that. If there are two nearest neighbors, both will be returned.
-  #ff_dt is a data table of hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt. If no data.table is provided, the function will look for the hard-coded path in exacloud (see below).
-  #chromoNum is a numeric() chromosome number (nb NOT "chr1") of the query position.
-  #range_v is a numeric() vector containing the Start and Stop bp position of the query (e.g., range_v = c(100,123))
-  #N is a numeric() argument the retreives the top N largest tpm-containing columns in a given row of ff_dt
-  #colStrWithChromLocations_str is a string containing the name() of the column in ff_dt containing the position information. In the ff_dt, note that the position information needs to be parsed out, which this function('s dependency) does automatically. Default is "00Annotation".
+  require(data.table)
+  
+  #If no ff_dt is provided, use the path provided instead
+  if(is.null(ff_dt)){
+    ff_dt = fread(ffDtPath)
+  }
   
   #Check that N isn't greater than the number of cell types/samples available
   if(N > length(grep('tpm', names(ff_dt)))){
     return(NULL)
   }else{
-    
-    if(is.null(ff_dt)){ #unchecked
-      require(data.table)
-      ff_dt = fread("grep -v '^#' /home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt")
+    #Sort and parse the identifier column of ff_dt to enable looking for nearby TSS neighbors
+    if(is.null(ffSorted_dt)){
+      ffSorted_dt = getSortedDTwithSplitOfFirstCol(ff_dt=copy(ff_dt), nameOfCol1=colStrWithChromLocations_str)
     }
-    ffSorted_dt = getSortedDTwithSplitOfFirstCol(ff_dt=copy(ff_dt), nameOfCol1=colStrWithChromLocations_str)
     
-    #check that range_v is valid
+    #Check that range_v is valid
     if (length(range_v)!=2){
       print("Too few or two many items in range_v. Should be a vector of length 2")
       return(NULL)
     }else{
-      #make sure the range goes in correct order
+      #Ceorce the range to go in correct order
       range_v = range(range_v)
       
-      #Find the first row where Start of our query is >= Start in dt
+      #Find which rows in the chromosome column of ffSorted_dt match our query chromosome
       chromHits = which(ffSorted_dt[,chr]==as.character(chromoNum))
       if(length(chromHits)<1){
         print(paste0("Invalid or non-matching chromosome number: ",chromoNum))
-        #browse()
         return(NULL)
       }else{
         startRowChrom = chromHits[1]
         endRowChrom = chromHits[length(chromHits)]
+        
+        #Find the first row where Start of our query is >= Start in dt
         directHit = which(ffSorted_dt[startRowChrom:endRowChrom,Stop]>=range_v[1] & range_v[2]>= ffSorted_dt[startRowChrom:endRowChrom,Start])
+        
+        #Sort each row (or optionally retrieve ranked entries passed from wrapper function), and pull out the top N hits into a data.table called topCells_dt. Add topCells_dt to a list called matches_ls.
         #I think this has to be a for loop, because I have to sort each row independently, and there's no way to retain colnames under those circumstances
-        #topCells = t(apply(ffSorted_dt[startRowChrom:endRowChrom,][directHit,grep('tpm', names(ffSorted_dt)),with=F],1,sort))
-        #topCells=sapply(ffSorted_dt[startRowChrom:endRowChrom,][directHit,grep('tpm', names(ffSorted_dt)),with=F],function(x)order(x,decreasing=TRUE))
-        #topCells[1:N]
         if(length(directHit)>0){
           matches_ls = list()
           for (dh in 1:length(directHit)){
-            topCells_dt = sort(ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],grep('tpm', names(ffSorted_dt)),with=F], decreasing = TRUE)[,1:N,with=F]
-            #topCellsName_v = names(topCells_dt)
+            
+            #If rank_mat has been passed, use it instead #Attn needs to be adjusted for tie break
+            if(!is.null(optRank_Mat)){
+              rankColNums = as.numeric(optRank_Mat[startRowChrom:endRowChrom,,drop=F][directHit[dh],grep('tpm', colnames(optRank_Mat)),drop=F])<=N
+              rankOrder = as.numeric(optRank_Mat[startRowChrom:endRowChrom,,drop=F][directHit[dh],grep('tpm', colnames(optRank_Mat)),drop=F][,rankColNums])
+              tmp = ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],grep('tpm', names(ffSorted_dt)),with=F]
+              topCells_dt = tmp[,rankColNums,with=F]
+              NamesOrdered = names(topCells_dt)[rankOrder]
+              setcolorder(topCells_dt,NamesOrdered)
+            }else{
+              topCells_dt = sort(ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],grep('tpm', names(ffSorted_dt)),with=F], decreasing = TRUE)[,1:N,with=F]
+            }
+            
+            #If ontology ID desired instead, return just those values instead
+            if(ffOntIdInstead ==T){
+              OntIDs = gsub('^.*CNhs.*\\.(.*$)','\\1',names(topCells_dt))
+              names(topCells_dt) = OntIDs
+            }
+            
+            #If URL decode desired, call the URL decode function
+            if(optURLdecode==T){
+              names(topCells_dt) = URLdecode(names(topCells_dt)) #Attn URLdecode hasn't been written yet
+            }
+            
             matches_ls[[length(matches_ls)+1]] = topCells_dt
-            names(matches_ls)[length(matches_ls)] = paste(chromoNum,max(range_v[1],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Start]),min(range_v[2],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Stop]),"matched_region_OriginalColName",ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],][[colStrWithChromLocations_str]],sep="_")
+            
+            #Name the match in matches_ls with latest start, earlier stop (i.e., the intersect range) and the original TSS identifer position in ff_dt.
+            LatestStart= max(range_v[1],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Start])
+            EarliestStop = min(range_v[2],ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],Stop])
+            OriginalFFdtIdentifier= ffSorted_dt[startRowChrom:endRowChrom,][directHit[dh],][[colStrWithChromLocations_str]]
+            names(matches_ls)[length(matches_ls)] = paste(chromoNum,LatestStart,EarliestStop,"matched_region_OriginalColName",OriginalFFdtIdentifier,sep="_")
           }
           return(matches_ls)
         }
@@ -319,15 +397,15 @@ getTopNCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt,chromoNum, range
           QstartDiffUpStop= range_v[1] - ffSorted_dt[startRowChrom:endRowChrom,][nearestUpstreamNeighborIdx,Stop]
           if (QstopDiffDownStart < QstartDiffUpStop){
             newPositions = range(ffSorted_dt[startRowChrom:endRowChrom,][nearestDownstreamNeighborIdx,Start], ffSorted_dt[startRowChrom:endRowChrom,][nearestDownstreamNeighborIdx,Stop])
-            return(getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=chromoNum, range_v=newPositions, N=N, colStrWithChromLocations_str=colStrWithChromLocations_str))
+            return(getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=chromoNum, range_v=newPositions, N=N, colStrWithChromLocations_str=colStrWithChromLocations_str,ffDtPath,ffOntIdInstead,optRank_Mat,optURLdecode,ffSorted_dt))
           }
           if(QstartDiffUpStop < QstopDiffDownStart){
             newPositions = range(ffSorted_dt[startRowChrom:endRowChrom,][nearestUpstreamNeighborIdx,Start], ffSorted_dt[startRowChrom:endRowChrom,][nearestUpstreamNeighborIdx,Stop])
-            return(getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=chromoNum, range_v=newPositions, N=N, colStrWithChromLocations_str=colStrWithChromLocations_str))
+            return(getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=chromoNum, range_v=newPositions, N=N, colStrWithChromLocations_str=colStrWithChromLocations_str,ffDtPath,ffOntIdInstead,optRank_Mat,optURLdecode,ffSorted_dt))
           }
           if(QstopDiffDownStart == QstartDiffUpStop){
             newPositions = range(ffSorted_dt[startRowChrom:endRowChrom,][nearestDownstreamNeighborIdx,Stop],ffSorted_dt[startRowChrom:endRowChrom,][nearestUpstreamNeighborIdx,Start])
-            return(getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=chromoNum, range_v=newPositions, N=N, colStrWithChromLocations_str=colStrWithChromLocations_str))
+            return(getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ff_dt,chromoNum=chromoNum, range_v=newPositions, N=N, colStrWithChromLocations_str=colStrWithChromLocations_str,ffDtPath,ffOntIdInstead,optRank_Mat,optURLdecode,ffSorted_dt))
           }
         }
       }
@@ -335,55 +413,12 @@ getTopNCellTypesDtVersionWithOutOfRangeReturns = function(ff_dt,chromoNum, range
   }
 }
 
-getTopXCellTypes = function(ff_mat=NULL, chromoNum, range_v, x, colStrWithChromLocations_str){
-  #' Generate and return a data table of the fantom5 hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt data SORTED numerically by numeric() chromosome number and THEN by Start position
-  #' 
-  #' @param ff_dt a data table of hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt or any version or subset thereof as defined by user.
-  #' @param nameOfCol1 a string matching the column in ff_dt that contains the TSS ID information (e.g., "chr10:10..20,-"). This function will parse out the chromosome, start, and stop.
-  #' @return A data.table of fantom5 hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt data SORTED numerically by numeric() chromosome number and THEN by Start position
-  #' @examples
-  #' ffDummy_dt = data.table(Annotation=c("chr10:10..20,-", "chr10:25..30,-","chr10:35..100,-","chr10:106..205,-","chr10:223..250,-","chr10:269..478,-","chr10:699..1001,-","chr10:2000..2210,-","chr10:2300..2500,-","chr10:2678..5678,-", "chr12:2678..5678,-"),tpmOne=c(0,0,0.213,1,1.2,0.5,0.7,0.9,0.8,0.86,0), tpmTwo=c(100,1000,1001,1500,900,877,1212,1232,1312,0,3),tpmThree=c(0.2138595,0,0,0,0,0,0.6415786,0,0,0,3))
-  if(is.null(ff_mat)){
-    require(data.table)
-    ff_mat = as.matrix(fread("grep -v '^#' /home/exacloud/lustre1/CompBio/genomic_resources/fantom5/human/hg19.cage_peak_phase1and2combined_tpm_ann.osc.txt"))
-  }
-  #check that range_v is valid
-  if (length(range_v)!=2){
-    print("Too few or two many items in range_v. Should be a vector of length 2")
-    return(NULL)
-  }else{
-    #make sure it goes in correct order
-    range_v = range(range_v)
-    #parse the first column of ff_mat, which has format of, chr10:100150986..100150988,+
-    annotationParsed_ls = strsplit(ff_mat[,colStrWithChromLocations_str], split='chr|:|\\.\\.|,')
-    #find first list element with 5
-    FIRST=1
-    while (length(annotationParsed_ls[[FIRST]])<5) {
-      FIRST = FIRST+1
-    }
-    matches_ls = list()
-    for (locCounter in FIRST:length(annotationParsed_ls)){
-      if(range_v[1] <= as.numeric(annotationParsed_ls[[locCounter]][4]) & range_v[2] >= as.numeric(annotationParsed_ls[[locCounter]][3]) & chromoNum==annotationParsed_ls[[locCounter]][2]){
-        #print(locCounter)
-        #browse()
-        #inRangeEntry_ls = sort(as.numeric(ff_mat[locCounter,grep('tpm', colnames(ff_mat))]), decreasing=T, index.return=T) #this is a super time consuming step
-        inRangeEntry_ls = sort(ff_mat[locCounter,grep('tpm', colnames(ff_mat))], decreasing=T, index.return=T) #this is a super time consuming step
-        names(inRangeEntry_ls[[1]]) = colnames(ff_mat)[grep('tpm', colnames(ff_mat))[inRangeEntry_ls[[2]]]]
-        matches_ls[[length(matches_ls)+1]] = inRangeEntry_ls[[1]][1:x]
-        names(matches_ls)[length(matches_ls)]=paste0(annotationParsed_ls[[locCounter]][2],":", annotationParsed_ls[[locCounter]][3],"-", annotationParsed_ls[[locCounter]][4])
-        #return(inRangeEntry_ls[[1]][1:x])
-      }#else search nearby for closest tss
-    }
-    return(matches_ls)
-  }
-}
-
 # ##Create dummy data set and test getTopNCellTypesDtVersionWithOutOfRangeReturns function
 # ffDummy_dt = data.table(Annotation=c("chr10:10..20,-", "chr10:25..30,-","chr10:35..100,-","chr10:106..205,-","chr10:223..250,-","chr10:269..478,-","chr10:699..1001,-","chr10:2000..2210,-","chr10:2300..2500,-","chr10:2678..5678,-", "chr12:2678..5678,-"),tpmOne=c(0,0,0.213,1,1.2,0.5,0.7,0.9,0.8,0.86,0), tpmTwo=c(100,1000,1001,1500,900,877,1212,1232,1312,0,3),tpmThree=c(0.2138595,0,0,0,0,0,0.6415786,0,0,0,3))
-# getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(1,10000), N=2, colStrWithChromLocations_str="Annotation")
-# getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(31,33), N=2, colStrWithChromLocations_str="Annotation")
-# getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(1,3), N=2, colStrWithChromLocations_str="Annotation")
-# getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(10000,10030), N=2, colStrWithChromLocations_str="Annotation")
+# test1 = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(1,10000), N=2, colStrWithChromLocations_str="Annotation")
+# test2 = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(31,33), N=2, colStrWithChromLocations_str="Annotation")
+# test3 = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(1,3), N=2, colStrWithChromLocations_str="Annotation")
+# test4 = getTopNCellTypesDtVersionWithOutOfRangeReturns(ff_dt=ffDummy_dt,chromoNum=10, range_v=c(10000,10030), N=2, colStrWithChromLocations_str="Annotation")
 # ffDummy_dt = data.table(Annotation=c("chr10:10..20,-", "chr10:25..30,-","chr10:35..100,-","chr10:106..205,-","chr10:223..250,-","chr10:269..478,-","chr10:699..1001,-","chr10:2000..2210,-","chr10:2300..2500,-","chr10:2678..5678,-"),tpmOne=c(0,0,0.213,1,1.2,0.5,0.7,0.9,0.8,0.86), tpmTwo=c(100,1000,1001,1500,900,877,1212,1232,1312,0),tpmThree=c(0.2138595,0,0,0,0,0,0.6415786,0,0,0))
 # query_dt = data.table(chrP = c(10,10,10,10,11), startP = c(1,31,1,10000,1), stopP=c(10000,33,3,10030,100))
 # FFTopNCellTypesWrapper(ff_dt = ffDummy_dt, query_dt = query_dt, ChrColName = "chrP", StartColName ="startP", StopColName = "stopP", N = 2, savePath = "~/Desktop/", colStrWithChromLocations_str="Annotation")
@@ -401,8 +436,8 @@ getTopXCellTypes = function(ff_mat=NULL, chromoNum, range_v, x, colStrWithChromL
 #   rankCount_mat[1,cNum] = sum(ffRanks_mat[,cNum]<=N)
 #   #colnames(rankCount_mat)[cNum] = colnames(ffRanks_mat)[cNum]
 # }
- 
- #ffDummy_dt[,sum(test_v%in%.I), by= .I] #1:nrow(ffDummy_dt)]
- # test_v = c(0,0,0.86)
- # which(ffDummy_dt[, rowSums(.SD), .SDcols=2:ncol(ffDummy_dt)] == sum(test_v))
- #ffDummy_dt[, if (all(.SD %in% test_v)) .SD, Annotation]
+
+#ffDummy_dt[,sum(test_v%in%.I), by= .I] #1:nrow(ffDummy_dt)]
+# test_v = c(0,0,0.86)
+# which(ffDummy_dt[, rowSums(.SD), .SDcols=2:ncol(ffDummy_dt)] == sum(test_v))
+#ffDummy_dt[, if (all(.SD %in% test_v)) .SD, Annotation]
