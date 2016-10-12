@@ -82,8 +82,8 @@ getSortedDTwithSplitOfFirstCol = function(ff_dt,nameOfCol1="00Annotation"){
   splits_mat = matrix(unlist(splits_ls), nrow=length(splits_ls), byrow = T)
   cNamesTmp = copy(names(ff_dt))
   ff_dt[,chr := gsub('chr','',splits_mat[,1])]
-  ff_dt[,chr := gsub('X','25',ff_dt[,chr])]
-  ff_dt[,chr := gsub('Y','26',ff_dt[,chr])]
+  ff_dt[,chr := gsub('X','24',ff_dt[,chr])] #Attn
+  ff_dt[,chr := gsub('Y','26',ff_dt[,chr])] #Attn
   ff_dt[,Start := splits_mat[,2]]
   ff_dt[,Stop := splits_mat[,3]]
   #ff_dt[,get(nameOfCol1):=NULL]
@@ -94,8 +94,8 @@ getSortedDTwithSplitOfFirstCol = function(ff_dt,nameOfCol1="00Annotation"){
   ff_dt$Start = as.numeric(ff_dt$Start)
   ff_dt$Stop = as.numeric(ff_dt$Stop)
   ff_dt_return = ff_dt[order(chr,Start)]
-  ff_dt_return[,chr := gsub('26','Y',ff_dt_return[,chr])]
-  ff_dt_return[,chr := gsub('25','X',ff_dt_return[,chr])]
+  #ff_dt_return[,chr := gsub('26','Y',ff_dt_return[,chr])] #Attn
+  #ff_dt_return[,chr := gsub('24','X',ff_dt_return[,chr])] #Attn
   return(ff_dt_return)
 }
 
