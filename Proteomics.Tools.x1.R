@@ -25,6 +25,7 @@ rqd.libraries = function (path) {
 
   # Required libraries
   require(data.table)
+  require(oligo)
   require(affy)
   require(limma)
   require(gdata)
