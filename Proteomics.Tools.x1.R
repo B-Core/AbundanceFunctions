@@ -496,7 +496,7 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
       }
     }
 
-    obj_MDS = makeMDSplot(normmat=normmat[mymask,], attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, subtitle=titlestr, ngenes=sum(mymask))
+    obj_MDS = makeMDSplot(normmat=norm_x[mymask,], attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, subtitle=titlestr, ngenes=sum(mymask))
 
     if(plot2file) dev.off()
   }
