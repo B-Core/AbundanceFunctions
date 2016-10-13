@@ -209,7 +209,8 @@ normMatrix = function(tag, raw.mat, expt.design,
 # ******** linear regression **************************************************
 
 regressMatrix = function(normmat, expt.design, lm_expression, 
-                         response_var="y", contr_list=NULL 
+                         response_var="y", contr_list=NULL,
+                         plotdata = NULL, plot2file = FALSE, histbins = 40
                          ){
   # function to run linear regression on multiresponse data matrix with given model and optional contrasts
   # Arguments
@@ -240,6 +241,15 @@ regressMatrix = function(normmat, expt.design, lm_expression,
   #      14d TxB           0        1
   #   example list: this list will cause creation of the matrix above
   #   list(baseline="Sham", contr.FUN="contr.treatment")
+  #
+  #  NOTE: The following additions are meant to be invisible to prior code!
+  #  plot2file: if TRUE - create p-val histogram and q-matrix plots
+  #  plotdata is a list of info relevant to labeling and saving the plot
+  #     plotdir:  plot destination directory
+  #     plotbase:  base filename for the plot. Suggest: bias reduction method
+  #     plottitle:  title for all plots
+  #     plotoffset:  optional offset for organizing plots 
+  #
 
   # imports
   require(qvalue)
@@ -332,6 +342,30 @@ regressMatrix = function(normmat, expt.design, lm_expression,
           error=function(e){myflag=FALSE; cat("No qvalues for",fac,"\n")} )
     if( myflag) { q_list[[fac]] = I(obj_qvalue) }
   }
+
+  # Create optional regression plots
+  if (plot2file) {
+    ### plot p value histogram
+    plotID = ifelse(isNumber(plotdata$plotoffset),paste0(plotdata$plotoffset + 8,"p"),"8p")
+    plotDesc = 'p.value_histogram'
+    png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
+        width=5,height=5.4,units="in",res=300)
+    hist(p_mat, nclass=histbins, main=plotdata$plottitle, xlab = "p-value")
+    mtext(lm_expression)
+    dev.off()
+
+    ### plot q value matrix plots for each factor
+    # Note that the first factor is intercept, no need to plot...
+    for (fac in colnames(p_mat)[2:ncol(p_mat)]) {
+      plotID = ifelse(isNumber(plotdata$plotoffset),paste0(plotdata$plotoffset + 8,"q"),"8q")
+      plotDesc = "p.value_QC.plot.array"
+      png(filename = sprintf('%s%s_%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase,
+                             plotDesc, fac), width=5,height=5.4,units="in",res=300)
+      plot(q_list[[fac]], rng=c(0,1), cex.axis=0.6)
+      dev.off()
+    }
+
+  } # End of plot2file optional summary plots
 
   # return values
   return( list( b_mat=b_mat, p_mat=p_mat, q_list=q_list ) )
