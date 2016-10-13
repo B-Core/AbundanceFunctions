@@ -272,6 +272,7 @@ regressMatrix = function(normmat, expt.design, lm_expression,
         } else if(myfun=="contr.sum"){
           fac_v = c( setdiff(levels(as.factor(expt.design[[fac]])), mybase), mybase) # put baseline last for contr.sum
           contr_lsmat[[fac]] = contr.sum(fac_v)
+          colnames(contr_lsmat[[fac]]) = fac_v[1:(length(fac_v)-1)]
         } else {
           stop(paste("Contrast function",myfun,"is not yet supported"))
         }
