@@ -410,7 +410,7 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
 #     and a slow or steep rise in q-values in remaining plots depending on 
 #     resolving power of data
 #  3) MDS plot restricted by q-value cut.
-#  norm_x:  abundance data, vector or matrix. nrow(normmat)==length(pvalue_v) 
+#  norm_x:  abundance data, vector or matrix. nrow(norm_x)==length(pvalue_v) 
 #  pvalue_v: vector of p-values previously used as input to qvalue()
 #  obj_qvalue: S3 object of qvalue class (a list!) returned by qvalue()
 #  qcut: either a number between 0 and 1 used as an upper qvalue limit for MDS,
@@ -508,7 +508,7 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
         }
       }
   
-      obj_MDS = makeMDSplot(normmat=normmat[mymask,], attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, subtitle=titlestr, ngenes=sum(mymask))
+      obj_MDS = makeMDSplot(normmat=norm_x[mymask,], attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, subtitle=titlestr, ngenes=sum(mymask))
   
       if(plot2file) dev.off()
     }
