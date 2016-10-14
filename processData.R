@@ -129,7 +129,7 @@ normMatrix = function(tag, raw.mat, expt.design,
   #   lmBy: for later, formula for regression using expt.design elements
   # the following 4 vectors _MUST have the same # elem in same order_
   # normvec: vector of tags for bias reduction methods
-  # normFUN: vector of string names for these bias reduction functions
+  # normFUN: vector of string names for these bias reduction functions #Feedback might could use a little more explanation
   # normarg: list of arguments to pass to each bias reduction function
   #          if 0 elements, no extra args are passed in do.call
   #          if 1 value for an argument, will be passed in do.call

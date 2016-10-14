@@ -8,7 +8,8 @@
 #####################################################################################################
 
 ##Proteomics.Tools.x1.R for calling proper libraries
-source("Proteomics.Tools.x1.R")
+repoPath = "~/Git_repos/AbundanceFunctions/"
+source(paste0(repoPath,"Proteomics.Tools.x1.R"))
 
 convertCELtoNonNormMat = function(pathToCELfiles){
   #' Read in CEL files from a directory argument, using the oligo package first and then, failing that, trying the affy package instead. Requires the relevent array package to be installed from BioConductor before run. Not sure of a good strategy for installing these if they haven't already been. Also want more sophistocated error handling here, but SO recommends against nested tryCatches(), because they don't work as expected:
@@ -24,6 +25,8 @@ convertCELtoNonNormMat = function(pathToCELfiles){
   #' path2CELfiles3 = "/Users/fishema/Desktop/CEL_files_for_testing/SNP6/"
   #' test3_mat = convertCELtoNonNormMat(path2CELfiles3)
   
+  require(oligo)
+  require(affy)
   tryCatch({
     eCELs = list.celfiles(pathToCELfiles,full.names=T)
     Data_obj = read.celfiles(eCELs)
