@@ -399,6 +399,7 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
 # ******** Q-value QC **********************************************************
 qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass, 
                       plotdata, colorspec, histbins=40, plot2file = FALSE, 
+                      p_hist=TRUE, q_plots=TRUE, MDS_plot=TRUE, 
                       filesep='/') {
 # This is a check on the proper running of q-value analysis
 # plots:
@@ -409,7 +410,7 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
 #     and a slow or steep rise in q-values in remaining plots depending on 
 #     resolving power of data
 #  3) MDS plot restricted by q-value cut.
-#  norm_x:  abundance data, vector or matrix. nrow(normmat)==length(pvalue_v) 
+#  norm_x:  abundance data, vector or matrix. nrow(norm_x)==length(pvalue_v) 
 #  pvalue_v: vector of p-values previously used as input to qvalue()
 #  obj_qvalue: S3 object of qvalue class (a list!) returned by qvalue()
 #  qcut: either a number between 0 and 1 used as an upper qvalue limit for MDS,
@@ -417,11 +418,14 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
 #  attribs:  list of sample classifications to be tracked in clustering
 #     each list element contains a string vector with one label per sample
 #  oneclass: string name of attribs element to be used in MDS plot
+#  p_hist, q_plots, MDS_plot: flags to plot (TRUE) or skip (FALSE) plot types
 #  plotdata is a list of info relevant to labeling and saving the plot
 #     plotdir:  plot destination directory
 #     plotbase:  base filename for the plot. Suggest: bias reduction method
 #     plottitle:  title for all plots
 #  colorspec is a vector of color specifiers for colorRampPalette  
+#  histbins: number of bins for p-value histogram
+#  filesep: filepath separator
 
   # constants
   fudgefac = 2 # fold excess permitted in rows recovered by top n qcut when specified as a quantile of qvalues
@@ -447,60 +451,67 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
     plotdata$plotdir = paste0(plotdata$plotdir,filesep)
   }
 
-  plotID = '8p'
-  plotDesc = 'p.value_histogram' 
-  if(plot2file) {
-  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
-      width=5,height=5.4,units="in",res=300)
+  if( p_hist ){
+    plotID = '8p'
+    plotDesc = 'p.value_histogram' 
+    if(plot2file) {
+    png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
+        width=5,height=5.4,units="in",res=300)
+    }
+    hist(pvalue_v, nclass=histbins, main=plotdata$plottitle)
+  
+    if(plot2file) dev.off()
   }
-  hist(pvalue_v, nclass=histbins, main=plotdata$plottitle)
-
-  if(plot2file) dev.off()
 
 
-  plotID = '8q'
-  plotDesc = 'q.value_QC.plot.array' 
-  if(plot2file) {
-  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
-      width=7,height=5.4,units="in",res=300)
+  if( q_plots ){
+    plotID = '8q'
+    plotDesc = 'q.value_QC.plot.array' 
+    if(plot2file) {
+    png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
+        width=7,height=5.4,units="in",res=300)
+    }
+    plot(obj_qvalue, rng=c(0,1), cex.axis=.6)
+  
+    if(plot2file) dev.off()
   }
-  plot(obj_qvalue, rng=c(0,1), cex.axis=.6)
-
-  if(plot2file) dev.off()
   
 
   # make first-draft MDS plot if abundance data are a matrix 
   #  (multiple samples to compare)
   obj_MDS = NULL
-  if( !is.null(dim(norm_x)) ){
-    plotID = '6q0'
-    plotDesc = 'MDS_q.value_QC' 
-    if(plot2file) {
-    png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
-        width=5.4,height=5.4,units="in",res=300)
-    }
-
-    # data to plot
-    if( !is.numeric(qcut) | qcut<0 | qcut>length(obj_qvalue$qvalues) ){
-      stop(paste(qcut," must be a number > 0 and <= nrow(data)"))
-    } else if( qcut <=1 ) { # assume this is a q-value on which to cut
-      mymask = obj_qvalue$qvalues < qcut & !is.na(obj_qvalue$qvalues)
-      titlestr= paste("qvalue <",signif(qcut,2) )
-    } else { # assume this is a number of top genes by qvalue on which to cut
-      q_quan = quantile(obj_qvalue$qvalues, probs=qcut/length(obj_qvalue$qvalues), na.rm=T)
-      mymask = obj_qvalue$qvalues <= q_quan & !is.na(obj_qvalue$qvalues)
-      titlestr= paste("top",sum(mymask),"q-values <=",signif(q_quan,3) )
-      # test for lack of resolution in q-values; if so use p-values instead
-      if( sum(mymask)>(qcut*fudgefac) ) { #identical qvalues at cut increase sum
-        p_quan = quantile( pvalue_v, probs=qcut/length(pvalue_v), na.rm=T)  
-        mymask = pvalue_v <= p_quan & !is.na(obj_qvalue$qvalues)
-        titlestr= paste("top",sum(mymask),"p-values <=",signif(p_quan,3) )
+  
+  if( MDS_plot ){
+    if( !is.null(dim(norm_x)) ){
+      plotID = '6q0'
+      plotDesc = 'MDS_q.value_QC' 
+      if(plot2file) {
+      png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
+          width=5.4,height=5.4,units="in",res=300)
       }
+  
+      # data to plot
+      if( !is.numeric(qcut) | qcut<0 | qcut>length(obj_qvalue$qvalues) ){
+        stop(paste(qcut," must be a number > 0 and <= nrow(data)"))
+      } else if( qcut <=1 ) { # assume this is a q-value on which to cut
+        mymask = obj_qvalue$qvalues < qcut & !is.na(obj_qvalue$qvalues)
+        titlestr= paste("qvalue <",signif(qcut,2) )
+      } else { # assume this is a number of top genes by qvalue on which to cut
+        q_quan = quantile(obj_qvalue$qvalues, probs=qcut/length(obj_qvalue$qvalues), na.rm=T)
+        mymask = obj_qvalue$qvalues <= q_quan & !is.na(obj_qvalue$qvalues)
+        titlestr= paste("top",sum(mymask),"q-values <=",signif(q_quan,3) )
+        # test for lack of resolution in q-values; if so use p-values instead
+        if( sum(mymask)>(qcut*fudgefac) ) { #identical qvalues at cut increase sum
+          p_quan = quantile( pvalue_v, probs=qcut/length(pvalue_v), na.rm=T)  
+          mymask = pvalue_v <= p_quan & !is.na(obj_qvalue$qvalues)
+          titlestr= paste("top",sum(mymask),"p-values <=",signif(p_quan,3) )
+        }
+      }
+  
+      obj_MDS = makeMDSplot(normmat=norm_x[mymask,], attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, subtitle=titlestr, ngenes=sum(mymask))
+  
+      if(plot2file) dev.off()
     }
-
-    obj_MDS = makeMDSplot(normmat=normmat[mymask,], attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, subtitle=titlestr, ngenes=sum(mymask))
-
-    if(plot2file) dev.off()
   }
 
   invisible( list(rowmask=mymask,obj_MDS=obj_MDS) )
@@ -712,6 +723,7 @@ designRatios = function (normmat, attribs, ratioby_ls,
 plotRatios = function (ratiomat, attribs, oneclass, plotdata, colorspec, 
                        rowmask=NULL, tag="selected",
                        NAtol=ncol(ratiomat)/2, SDtol=0.01, 
+                       heatmap_plot=TRUE, MDS_plot=TRUE, 
                        clim.pct=0.99, clim_fix=NULL, 
                        plot2file = FALSE, filesep='/', 
                        cexRow=0.00001, png_res=300) {
@@ -726,15 +738,16 @@ plotRatios = function (ratiomat, attribs, oneclass, plotdata, colorspec,
 #   each list element contains a string vector with one label per sample
 # tag: word or phrase to indicate what's special about _these_ ratios
 # oneclass: string name of attribs element to be used in MDS plot
+# heatmap_plot, MDS_plot: flags to plot (TRUE) or not (FALSE) these plots
 # plotdata: list of info relevant to labeling and saving the plot
 #   plotdir:  plot destination directory
 #   plotbase:  base filename for the plot
 #   plottitle:  title for all plots
-#  colorspec is a vector of color specifiers for colorRampPalette  
-#  clim.pct:  0:1 - fraction of data to limit max color
-#  clim_fix: if set, max abs ratio to show; data>clim_fix are shown as clim_fix
-#  cexRow: rowlabel size for heatmap, set to ~invisible by default
-#  png_res: resolution of saved png files in dpi; default 300
+# colorspec is a vector of color specifiers for colorRampPalette  
+# clim.pct:  0:1 - fraction of data to limit max color
+# clim_fix: if set, max abs ratio to show; data>clim_fix are shown as clim_fix
+# cexRow: rowlabel size for heatmap, set to ~invisible by default
+# png_res: resolution of saved png files in dpi; default 300
 
   # imports
   require(NMF)
@@ -760,28 +773,34 @@ plotRatios = function (ratiomat, attribs, oneclass, plotdata, colorspec,
   message(sprintf('selected rows = %s, excess NA rows = %s, low SD rows = %s',
                    sum(rowmask), sum(!NAmask), sum(!SDmask) ))
 
-  plotID = '5q1'
-  plotDesc = paste('Heatmap', tag, sep="_")
-  if(plot2file) {
-  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc), width=5,height=7,units="in",res=png_res)
+  ah_ls = NULL
+  if( heatmap_plot ){
+    plotID = '5q1'
+    plotDesc = paste('Heatmap', tag, sep="_")
+    if(plot2file) {
+    png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc), width=5,height=7,units="in",res=png_res)
+    }
+    
+    # plot heatmap
+    ah_ls = makeHeatmap( ratiomat=ratiomat[rowmask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct, clim_fix=clim_fix, cexRow=cexRow)
+    
+    if(plot2file) dev.off()
   }
 
-  # plot heatmap
-  ah_ls = makeHeatmap( ratiomat=ratiomat[rowmask,], attribs=attribs, plottitle = plotdata$plottitle, clim.pct=clim.pct, clim_fix=clim_fix, cexRow=cexRow)
+
+  obj_MDS = NULL
+  if( MDS_plot ){
+    plotID = '6q1'
+    plotDesc = paste('MDS', tag, sep="_") 
+    if(plot2file) {
+    png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc), width=5.4,height=5.4,units="in",res=png_res)
+    }
   
-  if(plot2file) dev.off()
-
-
-  plotID = '6q1'
-  plotDesc = paste('MDS', tag, sep="_") 
-  if(plot2file) {
-  png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc), width=5.4,height=5.4,units="in",res=png_res)
+    # plot MDS
+    obj_MDS = makeMDSplot(normmat=ratiomat[rowmask,], attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, ngenes=sum(rowmask))
+  
+    if(plot2file) dev.off()
   }
-
-  # plot MDS
-  obj_MDS = makeMDSplot(normmat=ratiomat[rowmask,], attribs=attribs, oneclass=oneclass, colorspec=colorspec, plottitle=plotdata$plottitle, ngenes=sum(rowmask))
-
-  if(plot2file) dev.off()
 
 
   # return processed data
