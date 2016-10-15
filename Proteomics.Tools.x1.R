@@ -8,12 +8,12 @@
 # qc.clusters      --- Plot heatmap and MDS for abundance data
 #                  --- Makes avg-all ratios for heatmap, drops small SD rows
 # qcQvalue         --- Plot p-value histogram, q-value auto-qc & MDS w q-cut
-# designRatios     --- Calculate ratios based on expt design
 # plotRatios       --- Plot heatmap and MDS for ratio data
 # scatterplot      --- X-Y Scatter plot
 # makeMDSplot      --- MDS plot child function called by qc functions
 # makeHeatmap      --- heatmap child function called by qc & design functions
-# getCidFromHeatmap--- Extract index and cluster ID from heatmap based on a number of branches by which to cut
+# getCidFromHeatmap--- Extract dendrogram info from heatmap return values
+# [designRatios]   --- [moved to processData.R]
 #
 # Authors: Theresa Lusardi, Julja Burchard, and Mark Fisher
 # Started - July 2016
@@ -520,8 +520,12 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
 
 
 # ******** Ratios by experimental design ***************************************
-designRatios = function (normmat, attribs, ratioby_ls, 
-                         q_list=NULL, cut_ls=NULL) { 
+#designRatios = function (normmat, attribs, ratioby_ls, 
+#                         q_list=NULL, cut_ls=NULL) { 
+# !!Function moved to processData.R!!
+#
+# State of function when last seen here:
+#
 # This is intended to calculate differential expression after feature selection
 # It will create ratios based on experimental design
 # normmat: matrix of experimental data in columns (with headers!)
@@ -552,171 +556,7 @@ designRatios = function (normmat, attribs, ratioby_ls,
 #   icut_fold = linear scale number for mean fold above min(normmat) required
 #   => include elements to execute cuts; omit to skip
 
-  # arguments
-
-  # q-value cuts
-  # main qcut
-  if( !exists("q_combine", where=cut_ls) ){
-    cut_ls$q_combine = "OR"
-  }
-  if( !exists("qcut", where=cut_ls) ){
-    qflag = "no"
-  } else if( !is.numeric(cut_ls$qcut) | cut_ls$qcut<=0 | cut_ls$qcut>nrow(normmat) ){
-    stop(paste(cut_ls$qcut,"must be a number > 0 and <= nrow(data)"))
-  } else if( cut_ls$qcut <1 ) { # assume this is a qvalue cut
-    qflag = "qval"
-  } else { # assume this is a number of top genes by qvalue on which to cut
-    qflag = "qtop"
-  }
-  # optional qcut to use for qvalues for factors to be avoided
-  if( !exists("qcutF", where=cut_ls) ){
-    qflagF = "no"
-  } else if( !is.numeric(cut_ls$qcutF) | cut_ls$qcutF<=0 | cut_ls$qcutF>nrow(normmat) ){
-    stop(paste(cut_ls$qcutF,"must be a number > 0 and <= nrow(data)"))
-  } else if( cut_ls$qcutF <1 ) { # assume this is a qvalue cut
-    qflagF = "qval"
-  } else { # assume this is a number of top genes by qvalue which to avoid
-    qflagF = "qtop"
-  }
-
-  # calculate ratios based on experimental design
-
-  # parse design in attribs and ratioby_ls
-  splitby_ls = NULL; refmk = logical(length(attribs[[1]])); refmk[]= TRUE
-  oneclass = names(ratioby_ls) # may be more than one! pick ref elem below
-  for( fac in names(ratioby_ls) ){
-    if( length(ratioby_ls[[fac]]) < length(unique(attribs[[fac]])) ){
-      # this is the level to use as baseline/reference
-      refmk = refmk & attribs[[fac]] == ratioby_ls[[fac]]
-      oneclass = fac # MDS plot should be colored by this
-    } else {
-      # this is a factor by which to divide the data before ratioing
-      splitby_ls = c(splitby_ls,attribs[fac])
-    }
-  }
-
-  # create composite split factor if indicated
-  splitfac_v = NULL
-  if(!is.null(splitby_ls) ){
-    splitfac_v = do.call(paste,c(splitby_ls,sep='.'))
-    Usplitfac_v = unique(splitfac_v)
-  }
-
-  # create list of ratio matrices based on experimental design
-  ratio_lsmat = NULL
-  if( !is.null(splitby_ls) ){
-    ratio_lsmat = vector(mode='list',length=length(Usplitfac_v))
-    names(ratio_lsmat) = Usplitfac_v
-    for( fac in Usplitfac_v ) {
-      ratio_lsmat[[fac]] = normmat
-      ratio_lsmat[[fac]] = ratio_lsmat[[fac]] - rowMeans(ratio_lsmat[[fac]][,refmk & splitfac_v==fac],na.rm=T)
-      ratio_lsmat[[fac]] = ratio_lsmat[[fac]][,splitfac_v==fac]
-    }
-  } else {
-    ratio_lsmat[[1]] = normmat
-    ratio_lsmat[[1]] = ratio_lsmat[[1]] - rowMeans(ratio_lsmat[[1]][,refmk],na.rm=T)
-  }
-  # combine ratios to make one matrix (each column represented once)
-  ratiomat = do.call(cbind,ratio_lsmat) # do.call reqd for cbind on list
-
-  # mask for rows
-  rowmask = logical(nrow(ratiomat)); rowmask[] = TRUE
-  
-  # optional qvalue mask
-  if( !is.null(q_list) ){
-    if( any(grepl("OR",cut_ls$q_combine,ignore.case=TRUE)) ){  rowmask[] = FALSE }
-    if( any(grepl("qvalues",names(q_list) )) ){ # one qvalue object supplied
-      # rearrange for easier looping
-      tmp = q_list; q_list=NULL; q_list[[1]] = tmp
-      names(q_list)[1] = "q_list"
-    }
-    for( i in 1:length(q_list) ){
-      if( !any(grepl("qvalues",names(q_list[[i]]) )) ){
-        stop("No qvalues in q_list element ",i)
-      }
-      # set main q-value cut for this qvalue object
-      if( !exists("qflag") ){
-        warning("Warning! q-value object supplied without q-value cut")
-      } else {
-        if( qflag=="qtop" ){
-          # find q-value cut for given top n features
-          qcut = quantile(q_list[[i]]$qvalues, probs=cut_ls$qcut/length(q_list[[i]]$qvalues), na.rm=T)
-        } else if( qflag=="qval" ){
-          qcut = cut_ls$qcut
-        }
-      }
-      if( !exists("qflagF") ){
-        if( exists("q_dir", where=cut_ls) ){
-          if( any( !cut_ls$q_dir ) ){
-            if( exists("qcut") ){
-              message("Q-values to be avoided will use main qcut ",qcut)
-            } else {
-              warning("No q-value cut given for q-values to be avoided")
-            }
-          }
-        }
-      } else {
-        if( qflagF=="qtop" ){
-          # find q-value cut for given top n features
-          qcutF = quantile(q_list[[i]]$qvalues, probs=cut_ls$qcutF/length(q_list[[i]]$qvalues), na.rm=T)
-        } else if( qflagF=="qval" ){
-          qcutF = cut_ls$qcutF
-        }
-      }
-      if( exists("qcut")|exists("qcutF") ){ # skip q-value filter if no cut 
-        q_include = FALSE
-        if( !exists("q_dir", where=cut_ls) ) { q_include =TRUE  
-        } else if( cut_ls$q_dir[i] ){ q_include=TRUE }
-        if( q_include ){ 
-          if( exists("qcut") ){
-            # include significant q-values
-            if( any(grepl("OR",cut_ls$q_combine,ignore.case=TRUE)) ){
-              rowmask = rowmask | q_list[[i]]$qvalues < qcut
-            } else {
-              rowmask = rowmask & q_list[[i]]$qvalues < qcut
-            }
-          } else {
-            warning("Not including based on qvalues in ",names(q_list)[i]," with no main qcut")
-          }
-        } else { # avoid the significant qvalues
-          # this is set to AND on assumption we will want to remove
-          #  nuisance significance, not to include all non-significant nuisances
-          if( exists("qcutF") ){
-            rowmask = rowmask & q_list[[i]]$qvalues > qcutF
-          } else if( exists("qcut") ){
-            rowmask = rowmask & q_list[[i]]$qvalues > qcut
-          } else {
-            warning("Not avoiding based on qvalues in ",names(q_list)[i]," with no main qcut")
-          }
-        }
-      }
-    } # end q-list for-loop
-  }   # end if q-list
-
-  # optional non-qvalue masks
-  # include features
-  if( exists("include_ID", where=cut_ls) ){
-    rowmask = rowmask | rownames(ratiomat) %in% cut_ls$include_ID
-  }
-  # exclude ratios
-  if( exists("rcut_fold", where=cut_ls) ){
-    rowmask = rowmask & apply(X=abs(ratiomat), MARGIN=1, FUN=max, na.rm=T) > log2(cut_ls$rcut_fold)
-  }
-  # exclude abundances
-  if( exists("icut_fold", where=cut_ls) ){
-    rowmask = rowmask & apply(X=normmat, MARGIN=1, FUN=mean, na.rm=T) > ( log2(cut_ls$icut_fold) + min(normmat,na.rm=T) )
-  }
-
-  # report selection size
-  message(sprintf('selected rows = %s, !selected rows = %s',
-                   sum(rowmask), sum(!rowmask)))
-
-
-  # return processed data
-  invisible( list(ratiomat=ratiomat, rowmask=rowmask, oneclass=oneclass) )
-
-
-} # end designRatios
+#} # end designRatios
 
 
 # ******** MDS & Heatmap plots for ratios **************************************
