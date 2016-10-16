@@ -423,8 +423,13 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
 #     plotdir:  plot destination directory
 #     plotbase:  base filename for the plot. Suggest: bias reduction method
 #     plottitle:  title for all plots
+#     plotSubtitle:  optional subtitle; suggest lm_expression
 #  colorspec is a vector of color specifiers for colorRampPalette  
 #  histbins: number of bins for p-value histogram
+#  plot2file: if TRUE save plots to location defined in plotdata$plotdir
+#  fac_sel:  NULL defaults to plotting all factors; can specify subset of factors in a vector
+#  lm_expression is the linear model (eg, "y ~ factor1 + factor2"), included as a subtitle and filename value
+#  p_hist, q_plots, MDS_plot FALSE allow suppression of a plot type
 #  filesep: filepath separator
 
   # constants
@@ -453,20 +458,25 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
 
   if( p_hist ){
     plotID = '8p'
-    plotDesc = 'p.value_histogram' 
+    pD = 'p.value_histogram' 
+    subTrue = is.vector(plotdata$plotSubtitle)
+    plotDesc = ifelse(subTrue, paste(make.names(plotdata$plotSubtitle),pD, sep = '_'), pD)
     if(plot2file) {
     png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
         width=5,height=5.4,units="in",res=300)
     }
     hist(pvalue_v, nclass=histbins, main=plotdata$plottitle)
-  
+    if(is.vector(plotdata$plotSubtitle)) {
+      mtext(plotdata$plotSubtitle)
+    }
     if(plot2file) dev.off()
   }
 
 
   if( q_plots ){
     plotID = '8q'
-    plotDesc = 'q.value_QC.plot.array' 
+    pD = 'q.value_QC.plot.array' 
+    plotDesc = ifelse(subTrue, paste(make.names(plotdata$plotSubtitle),pD, sep = '_'), pD)
     if(plot2file) {
     png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
         width=7,height=5.4,units="in",res=300)
@@ -517,6 +527,7 @@ qcQvalues = function (norm_x, pvalue_v, obj_qvalue, qcut, attribs, oneclass,
   invisible( list(rowmask=mymask,obj_MDS=obj_MDS) )
 
 } # end of qcQvalue()
+
 
 
 # ******** Ratios by experimental design ***************************************
