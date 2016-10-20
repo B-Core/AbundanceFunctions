@@ -309,7 +309,7 @@ regressMatrix = function(normmat, expt.design, lm_expression,
   n = length(lm_fac) - sum(lm_fac %in% names(expt.design)) 
   if( n != 0 ){
     test_vec = setdiff(lm_fac, names(expt.design))
-    stop(n,"regression factors not found in exptl design list: ",paste(test_vec,sep=", "))
+    stop(n," regression factors not found in exptl design list: ",paste(test_vec,sep=", "))
   }
   # pull out factors supplied in exptl design for use in lm, & assign contrasts
   lm_list = lapply(expt.design[names(expt.design) %in% lm_fac],as.factor)
