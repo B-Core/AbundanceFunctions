@@ -312,7 +312,14 @@ regressMatrix = function(normmat, expt.design, lm_expression,
     stop(n," regression factors not found in exptl design list: ",paste(test_vec,sep=", "))
   }
   # pull out factors supplied in exptl design for use in lm, & assign contrasts
-  lm_list = lapply(expt.design[names(expt.design) %in% lm_fac],as.factor)
+  lm_list = NULL
+  for( lm_name in names(expt.design)[names(expt.design) %in% lm_fac] ){
+    if( typeof(expt.design[[lm_name]]) == "character" ) {
+      lm_list[[lm_name]] = as.factor(expt.design[[lm_name]])
+    } else {
+      lm_list[[lm_name]] = expt.design[[lm_name]]
+    }
+  }
   # add contrasts if contrasts input was given
   if( !is.null(contr_list) ){
     for(fac in names(lm_list) ){
