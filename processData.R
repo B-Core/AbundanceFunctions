@@ -304,11 +304,12 @@ regressMatrix = function(normmat, expt.design, lm_expression,
     stop("Regression formula was not supplied as a string") 
   }
   # check supplied factors for presence in formula
-  lm_fac = regmatches(lm_expression,gregexpr('(\\w+)',lm_expression))[[1]]
+  lm_fac = regmatches(lm_expression,gregexpr('([A-Za-z0-9_.]+)',lm_expression))[[1]]
   lm_fac = setdiff(lm_fac, response_var)
   n = length(lm_fac) - sum(lm_fac %in% names(expt.design)) 
   if( n != 0 ){
-    stop(n,"regression factors not found in exptl design list")
+    test_vec = setdiff(lm_fac, names(expt.design))
+    stop(n,"regression factors not found in exptl design list: ",paste(test_vec,sep=", "))
   }
   # pull out factors supplied in exptl design for use in lm, & assign contrasts
   lm_list = lapply(expt.design[names(expt.design) %in% lm_fac],as.factor)
