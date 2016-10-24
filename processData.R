@@ -6,6 +6,7 @@
 # designRatios     --- calculate groupwise ratios and select feature masks
 # lmPval           --- matricized multi-response linear regression significance
 #                      duplicated from R-utils for convenient sourcing
+# mapSJ2feature    --- map splice junctions to genomic features by coordinates
 
 
 # ******** cyclic Loess bias reduction *****************************************
@@ -679,4 +680,125 @@ lmPval = function(lm.obj){
   return(ans)
 }
 
+
+# ******** map splice junctions to feature(s) **********************************
+
+
+mapSJ2feature = function (SJmat, gtf.file, 
+  gtf.key = "gene", gtf.feature = "feature", 
+  gtf.orig.col = c("gene_id","gene_name","seqname","start","end"), 
+  gtf.col = c("Gene","Symbol","Chr","start","stop"), 
+  ikey = 1, isym = 2, ic = 3, i0 = 4, i1 = 5, #chr, start, stop
+  pos.col = "Pos", pos.delim ="\\.", delim.sub="_",
+  source.me="~burchard/git.R/AbundanceFunctions/readENSgtf.R"
+  ) {
+  # genomic annotation of splice junction files
+  # returns data.table with SJmat values and annotation for genomic features
+  #         overlapping start and stop of the splice junction
+  # TO DO: generalize for any input genomic interval type
+  # gtf.file : file of genome annotation in gtf or gff format
+  #           usually best to parse GTF used for data processing
+  # gtf.feature : column with biotype AND rowtype information
+  # gtf.key : key rowtype to keep, given as value found in feature column
+  # gtf.orig.col : column names to keep in extracted gtf.file rows 
+  # ikey, isym, ic, i0, i1 : short indices for key feature, gene symbol and 
+  #                          SJ position columns chr, start, stop
+  # pos.col : column for SJ identifiers comprising chr, start, stop
+  # pos.delim : delimiter for splitting SJ identifiers into chr, start, stop
+  # delim.sub : replacement for delimiter if found chr field
+  # source.me : R file with readENSgtf function
+
+
+  # imports
+  require(data.table)
+  require(IRanges)
+  source(source.me) # very trusting!
+  
+  
+  # read in genome annotation
+  # whole file -- use for biotype annotation
+  gtf = readENSgtf(filename=gtf.file)
+  message("Genome annotation file ",gtf.file," read in with ",nrow(gtf)," rows")
+  feature.gtf = gtf[get(gtf.feature)==gtf.key, mget(gtf.orig.col)]
+  names(feature.gtf) = gtf.col
+  setorderv(feature.gtf,cols=gtf.col[c(ic,i0,i1)],na.last=TRUE)
+  # note setkeyv MUST be run 2nd as setorderv wipes key
+  setkeyv(feature.gtf,gtf.col[ikey]) 
+  
+  
+  # collect all SJ positions and assign to features as possible
+  
+  # collect SJ positions
+  SJs_v =  unique(rownames(SJmat))
+  # defend against delimiters in chromosome names by keeping last 2 delimiters
+  mypattern = paste0('^(.*?',pos.delim,'.*?)(\\.[0-9]+\\.[0-9]+)$')
+  idx = grep(mypattern, SJs_v)
+  if( length(idx)>0 ){ # some chr have delimiter
+    tmp1 = gsub(mypattern, '\\1', SJs_v[idx])
+    tmp1 = gsub(pos.delim, delim.sub, tmp1)
+    tmp2 = gsub(mypattern, '\\2', SJs_v[idx])
+    SJs_v[idx] = paste0(tmp1,tmp2)
+  }
+  # split out fields
+  SJs_dt = data.table(do.call(rbind,
+                      lapply(SJs_v,function(x){strsplit(x,pos.delim)[[1]]})))
+  names(SJs_dt) = gtf.col[c(ic,i0,i1)]
+  # put chr names back as they were
+  if( length(idx)>0 ){
+    set(SJs_dt, i=as.integer(idx), j=gtf.col[ic], 
+        value=gsub(delim.sub,pos.delim,SJs_dt[idx,get(gtf.col[ic])]) )
+  }
+  # convert start, stop to numeric
+  set(SJs_dt, j=gtf.col[i0], value=as.numeric(SJs_dt[,get(gtf.col[i0])]) )
+  set(SJs_dt, j=gtf.col[i1], value=as.numeric(SJs_dt[,get(gtf.col[i1])]) )
+  setorderv(SJs_dt,cols=gtf.col[c(ic,i0,i1)],na.last=TRUE)
+  # SJ start feature; initiate to NA of type character
+  set(SJs_dt,j=gtf.col[ikey],value="NA"); SJs_dt[,(gtf.col[ikey])]=NA
+  # SJ end feature if different
+  set(SJs_dt,j=paste0(gtf.col[ikey],1),value="NA");SJs_dt[,(paste0(gtf.col[ikey],1))]=NA
+  # feature assignment: first, split by chromosomes
+  for(chr in unique(feature.gtf[,get(gtf.col[ic])]) ){
+    gdx = which(feature.gtf[,get(gtf.col[ic])]==chr)
+    sjdx = which(SJs_dt[,get(gtf.col[ic])]==chr)
+    # find feature containing start of SJ
+    #  return vector positions are positions in sjdx; 
+    #  values are positions in gdx
+    gdx0 = findOverlaps(subject=IRanges(start=feature.gtf[gdx,get(gtf.col[i0])],
+                                  end=feature.gtf[gdx,get(gtf.col[i1])]), 
+                        query=IRanges(start=SJs_dt[sjdx,get(gtf.col[i0])], 
+                                  width=1), select="first")
+    sjdx0 = which(!is.na(gdx0)); gdx0 = gdx0[sjdx0]
+    # find feature containing end of SJ
+    gdx1 = findOverlaps(subject=IRanges(start=feature.gtf[gdx,get(gtf.col[i0])],
+                                  end=feature.gtf[gdx,get(gtf.col[i1])]), 
+                        query=IRanges(start=SJs_dt[sjdx,get(gtf.col[i1])], 
+                                  width=1), select="first")
+    sjdx1 = which(!is.na(gdx1)); gdx1 = gdx1[sjdx1]
+    # annotate SJs with feature identifiers where mapped
+    set(SJs_dt,i=as.integer(sjdx[sjdx0]), j=gtf.col[ikey],
+        value=feature.gtf[gdx[gdx0],get(gtf.col[ikey])])
+    set(SJs_dt,i=as.integer(sjdx[sjdx0]), j=gtf.col[isym],
+        value=feature.gtf[gdx[gdx0],get(gtf.col[isym])])
+    set(SJs_dt,i=as.integer(sjdx[sjdx1]), j=paste0(gtf.col[ikey],1),
+        value=feature.gtf[gdx[gdx1],get(gtf.col[ikey])])
+    set(SJs_dt,i=as.integer(sjdx[sjdx1]), j=paste0(gtf.col[isym],1),
+        value=feature.gtf[gdx[gdx1],get(gtf.col[isym])])
+  }
+  # add column build like SJmat rownames to translation data.table
+  # using non-escaped version of delimiter 
+  my.delim = gsub("\\\\","",pos.delim)
+  set(SJs_dt, j=pos.col, value=SJs_dt[,
+      do.call(paste,c(mget(gtf.col[c(ic,i0,i1)]),list(sep=my.delim)))] )
+  setkeyv(SJs_dt,pos.col)
+
+  # combine ID translations with data
+  SJmat_dt = data.table(SJ_mat, keep.rownames=T)
+  names(SJmat_dt)[names(SJmat_dt)=="rn"] = pos.col
+  setkeyv(SJmat_dt, pos.col)
+  SJs_dt = merge(SJs_dt, SJmat_dt)
+
+  # return data.table
+  return(SJs_dt)
+  
+}
 

@@ -113,7 +113,7 @@ read_STAR = function( useme.cols, label.from.colname, annCol.label,
   # write to file
   if(write2file){
     for(ctype in names(LoM.raw) ){
-      my.dt = data.frame(LoM.raw[[ctype]],keep.rownames=TRUE)
+      my.dt = data.table(LoM.raw[[ctype]],keep.rownames=TRUE)
       write.csv(my.dt,file=paste('raw',ctype,"csv",sep='.'),quote=F)
     }
     cat(sapply(annCol, toString), file='expt.design.txt', sep="\n")
