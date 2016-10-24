@@ -198,7 +198,9 @@ normMatrix = function(tag, raw.mat, expt.design,
 
   # write normalized data to files
   for( mynorm in normvec ){
-    my.dt = data.frame(LoM.norm[[mynorm]],keep.rownames=TRUE) ##feedback note this is not a data table..
+    my.dt = data.table(LoM.norm[[mynorm]],keep.rownames=TRUE) ##feedback note this is not a data table..
+    # data.table names the rowname column "rn"
+    names(my.dt)[names(my.dt)=="rn"] = "Identifier"
     write.csv(my.dt,file=paste(mynorm,tag,"csv",sep='.'),quote=F) 
   }
 
