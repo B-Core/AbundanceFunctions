@@ -7,20 +7,24 @@
 
 
 read_STAR = function( useme.cols, label.from.colname, annCol.label, 
-          annCol.names, annCol.normBy, annCol.lmBy, 
+          annCol.names, annCol.normBy=NULL, annCol.lmBy=NULL, 
           readir = '.', readpattern = '.', 
           outypes = list(gene.counts='Gene.out.tab',SJ.counts='SJ.out.tab'), 
           outcol = list(gene.counts = c("Gene","Reads","FwdReads","RevReads"),
           SJ.counts = c("Chr","IntronStart","IntronStop","Strand","IntronMotif","Annotated","UniqueReads","MultiReads","MaxOverhang")), 
           outkey = list(gene.counts = 1, SJ.counts = 1:3), 
           outsum = list(gene.counts = c("N_ambiguous","N_multimapping","N_noFeature","N_unmapped"), SJ.counts = c()), 
-          stranded.col = list(gene.counts = c(1,3,4),SJ.counts = c(1:3,7)), 
-          unstranded.col = list(gene.counts = c(1,2),SJ.counts = c(1:3,7)), 
+          stranded.col = list(gene.counts = c(1:4),SJ.counts = c(1:3,7:8)), 
+          unstranded.col = list(gene.counts = c(1:4),SJ.counts = c(1:3,7)), 
           stranded=F, filesep="/", write2file=TRUE
           ){
   # read in STAR output from processing of RNAseq data
-  # format 08/26/2016: one directory per FASTQ file, named after FASTQ file
-  # contains gene count and splice-junction count files
+  # return list : LoM.raw contains gene and SJ count matrics
+  #               expt.design is a list with expt info parsed from FASTQ names
+  #               myreads indicates the properly stranded version of gene counts
+  #       (list(LoM.raw = LoM.raw, expt.design = annCol, myreads=myreads))
+  # input format 08/26/16: one directory per FASTQ file, named after FASTQ file
+  #                        contains gene count and splice-junction count files
   # arguments:
   # useme.cols: '(C|D)' -- custom regex for processed data to retain and normalize
   # label.from.colname: '^.*AB_([0-9]+_[^_]+).*$' -- regex to extract sample labels from FASTQ file names
@@ -56,7 +60,7 @@ read_STAR = function( useme.cols, label.from.colname, annCol.label,
       mysuffix = outypes[[ctype]]
       mycol = outcol[[ctype]]
       mykey = outkey[[ctype]]
-      myfile = paste(samps[i],dir(samps[i],mysuffix),sep=filesep)
+      myfile = file.path(readir,samps[i],dir(file.path(readir,samps[i]),mysuffix))
       tab[[i]][[ctype]] = fread(myfile, verbose=F)
       # type-specific processing
       names(tab[[i]][[ctype]])[mykey] = mycol[mykey]
@@ -103,6 +107,33 @@ read_STAR = function( useme.cols, label.from.colname, annCol.label,
     }
   }
 
+  # test to confirm strandedness of gene-based data type
+  i = grep('gene', names(LoM.raw),ignore.case=T)[1]
+  fwdmk = grepl('fwd|forward|sense', names(LoM.raw[[i]]), ignore.case=T)
+  revmk = grepl('rev|anti', names(LoM.raw[[i]]), ignore.case=T)
+  f = which(fwdmk)[1]; r = which(revmk)[1]; u = which(!fwdmk & !revmk)[1]
+  if( any(is.na( c(f,r,u) )) ){
+    message("Forward: ",f,"; Reverse: ",r,"; Unstranded: ",u)
+    stop('Gene-based data must provide forward, reverse and unstranded types')
+  }
+  testv = log2(colSums(LoM.raw[[i]][[u]],na.rm=T)+1) - log2(colSums(LoM.raw[[i]][[f]],na.rm=T)+colSums(LoM.raw[[i]][[r]],na.rm=T)+1)
+  if( sum(round(testv,0))>1 ){
+      stop("Forward and reverse reads don't add up to total reads!")
+  } else {
+    testv =  log2(colSums(LoM.raw[[i]][[f]],na.rm=T)) - log2(colSums(LoM.raw[[i]][[r]],na.rm=T)+1)
+    if( sum(round(testv,0))>1){            # fwd strand excess over rev
+      myreads = names(LoM.raw[[i]])[f]
+      cat(" Using", myreads, "gene counts","\n")
+    } else if( sum(round(testv,0))<=-1){   # rev strand excess over fwd
+      myreads = names(LoM.raw[[i]])[r]
+      cat(" Using", myreads, "gene counts","\n")
+    } else {
+      myreads = names(LoM.raw[[i]])[u] # no strand inequality
+      cat(" Using", myreads, "gene counts","\n")
+    }
+  }
+
+
   # annotations for columns, as specified in arguments
   annCol = NULL
   for(i in 1:length(annCol.label) ){annCol = c(annCol,list(gsub(annCol.label[i],'\\1', samps )) )}
@@ -113,14 +144,19 @@ read_STAR = function( useme.cols, label.from.colname, annCol.label,
   # write to file
   if(write2file){
     for(ctype in names(LoM.raw) ){
-      my.dt = data.frame(LoM.raw[[ctype]],keep.rownames=TRUE)
-      write.csv(my.dt,file=paste('raw',ctype,"csv",sep='.'),quote=F)
+      for(colx in names(LoM.raw[[ctype]]) ){
+        my.dt = data.table(LoM.raw[[ctype]][[colx]],keep.rownames=TRUE)
+        # data.table names the rowname column "rn"
+        names(my.dt)[names(my.dt)=="rn"] = "Identifier"
+        write.csv(my.dt,file=paste('raw',ctype,colx,"csv",sep='.'),
+                  quote=F, row.names=F)
+      }
     }
     cat(sapply(annCol, toString), file='expt.design.txt', sep="\n")
   }
 
   # return list with data matrix and exptl design
-  return(list(LoM.raw = LoM.raw, expt.design = annCol))
+  return(list(LoM.raw = LoM.raw, expt.design = annCol, myreads=myreads))
 }
 
 
