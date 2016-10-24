@@ -129,7 +129,7 @@ normMatrix = function(tag, raw.mat, expt.design,
   #   lmBy: for later, formula for regression using expt.design elements
   # the following 4 vectors _MUST have the same # elem in same order_
   # normvec: vector of tags for bias reduction methods
-  # normFUN: vector of string names for these bias reduction functions #Feedback might could use a little more explanation
+  # normFUN: vector of string names for these bias reduction functions 
   # normarg: list of arguments to pass to each bias reduction function
   #          if 0 elements, no extra args are passed in do.call
   #          if 1 value for an argument, will be passed in do.call
@@ -240,7 +240,7 @@ regressMatrix = function(normmat, expt.design, lm_expression,
   #      14d TxA           1        0
   #      14d TxB           0        1
   #   example list: this list will cause creation of the matrix above
-  #   list(baseline="Sham", contr.FUN="contr.treatment")
+  #   list(baseline="Sham", contr.FUN="contr.treatment") #Other options for contr.FUN = {"contr.helmert", "contr.poly", "contr.sum"} 
   #
   #  NOTE: The following additions are meant to be invisible to prior code!
   #  plot2file: if TRUE - create p-val histogram and q-matrix plots
@@ -248,8 +248,8 @@ regressMatrix = function(normmat, expt.design, lm_expression,
   #     plotdir:  plot destination directory
   #     plotbase:  base filename for the plot. Suggest: bias reduction method
   #     plottitle:  title for all plots
-  #     plotoffset:  optional offset for organizing plots 
-  #
+  #     plotoffset:  optional offset for organizing plots  #Feedback what would be an example value of this?
+  # #Feedback what about histbins?
 
   # imports
   require(qvalue)
@@ -354,7 +354,7 @@ regressMatrix = function(normmat, expt.design, lm_expression,
   # Create optional regression plots
   if (plot2file) {
     ### plot p value histogram
-    plotID = ifelse(isNumber(plotdata$plotoffset),paste0(plotdata$plotoffset + 8,"p"),"8p")
+    plotID = ifelse(is.numeric(plotdata$plotoffset),paste0(plotdata$plotoffset + 8,"p"),"8p") #Feedback changed from isNumer to is.numeric() -MF
     plotDesc = 'p.value_histogram'
     png(filename = sprintf('%s%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
         width=5,height=5.4,units="in",res=300)
@@ -365,7 +365,7 @@ regressMatrix = function(normmat, expt.design, lm_expression,
     ### plot q value matrix plots for each factor
     # Note that the first factor is intercept, no need to plot...
     for (fac in colnames(p_mat)[2:ncol(p_mat)]) {
-      plotID = ifelse(isNumber(plotdata$plotoffset),paste0(plotdata$plotoffset + 8,"q"),"8q")
+      plotID = ifelse(is.numeric(plotdata$plotoffset),paste0(plotdata$plotoffset + 8,"q"),"8q") #Feedback changed from isNumber to is.numeric -MF
       plotDesc = "p.value_QC.plot.array"
       png(filename = sprintf('%s%s_%s_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase,
                              plotDesc, fac), width=5,height=5.4,units="in",res=300)
@@ -412,7 +412,7 @@ designRatios = function (normmat, attribs, ratioby_ls,
 #     TRUE: select features with q < qcut for i'th qvalue object
 #     FALSE: select features with q > qcut
 #   rcut_fold = linear scale number for min best abs ratio required
-#   icut_fold = linear scale number for mean fold above min(normmat) required
+#   icut_fold = linear scale number for mean fold above min(normmat) required #Feedback the difference between these two is not clear to me
 #   => include elements to execute cuts; omit to skip
 
   # arguments
