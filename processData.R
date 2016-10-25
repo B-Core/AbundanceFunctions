@@ -953,4 +953,7 @@ outputTable = function(normmat, gtf.file, rowmask=NULL, ratiomat=NULL,
     out_dt = merge(feature.gtf, out_dt, by.x=gtf.col[ikey], by.y="rn", all.y=T)
   }
 
+  # return data.table
+  return(out_dt)
+
 } 
