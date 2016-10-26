@@ -136,7 +136,7 @@ hex.maplot = function (comp1, comp2, c12names, yrange = FALSE, plot2file = FALSE
 }
 
 # ******** Summary *************************************************************
-summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, colorspec, plotdata, plot2file = FALSE, histbins = 40, expand.2D = 5, filesep="/", plotIDOffset = 0) {
+summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, colorspec, plotdata, plot2file = FALSE, histbins = 40, expand.2D = 5, filesep="/", plotIDOffset = 0, verbose = FALSE) {
 # rawmat is the matrix of raw data. Should have any background addition and
 #  be scaled according to normalized data
 # normmat is a matrix of experimental data in columns (with headers!)
@@ -163,6 +163,10 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
     plotdata$plotdir = paste0(plotdata$plotdir,filesep)
   }
 
+  # Trouble shooting messages if verbose == TRUE
+  if(verbose) {cat("Create summary plots for", plotdata$plottitle, '\n')}
+  if(verbose) {cat("Plot to file", ifelse(plot2file, "enabled", "disabled"), '\n')}
+
 # set up plotting colors
   u.samp.classes = unique(samp.classes)
   colmap = colorRampPalette(colorspec)
@@ -175,6 +179,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
 # Boxplot of all data
   plotID = 1 + plotIDOffset
   plotDesc = 'boxplot'
+  if(verbose) {message(sprintf("Plotting %s, ID = %i", plotDesc, plotID))}
   if(plot2file) {
   png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
       width=5,height=5.4,units="in",res=144)
@@ -185,6 +190,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
 # Scatterplot of all data
   plotID = 2 + plotIDOffset
   plotDesc = 'scatter'
+  if(verbose) {message(sprintf("Plotting %s, ID = %i", plotDesc, plotID))}
   if(plot2file) {
     png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
         width=5,height=5.4,units="in",res=144)
@@ -203,6 +209,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
 # Density plot
   plotID = 3 + plotIDOffset
   plotDesc = 'density'
+  if(verbose) {message(sprintf("Plotting %s, ID = %i", plotDesc, plotID))}
   if(plot2file) {
     png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
         width=5,height=5.4,units="in",res=144)
@@ -227,8 +234,9 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
   if(plot2file) dev.off()
 
 # SD plot
-  plotID = 7 + plotIDOffset
+  plotID = 4 + plotIDOffset
   plotDesc = 'spread'
+  if(verbose) {message(sprintf("Plotting %s, ID = %i", plotDesc, plotID))}
   if(plot2file) {
     png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
         width=5,height=5.4,units="in",res=144)
@@ -239,7 +247,9 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
   # find rows informative on SD for all classes
   row_mk = logical(nrow(normmat)); row_mk[] = TRUE
   for( myclass in u.samp.classes ){
-    row_mk = row_mk & rowSums(!is.na(normmat[,samp.classes==myclass]))>1 }
+    row_mk = row_mk & rowSums(!is.na(normmat[,samp.classes==myclass]))>1
+    if(verbose) {message(sprintf("Masked rows for %s = %i", myclass, sum(row_mk)))}
+  }
   # calculate SDs and intensities
   for( myclass in u.samp.classes ){
     int_mat = cbind(int_mat, rowMeans(normmat[row_mk,samp.classes==myclass],na.rm=T))
@@ -260,6 +270,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
   # build color list
   collist = NULL; ncols = 64
   for(j in 1:ncol(sdmat) ){
+    if(verbose) {message(sprintf("Class %s, n(sd=0) %i", colnames(sdmat)[j], sum(sdmat[, j]==0)))}
     # color axis for each group, lighter at low end & mostly transparent 
     col1 = unique(clower[samp.classes==colnames(sdmat)[j] ])[1]
     col2 = unique(colvec[samp.classes==colnames(sdmat)[j] ])[1]
@@ -302,6 +313,12 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
          ylab='Standard deviation',
          main = plotdata$plottitle)
 
+  if(verbose) {
+    message(sprintf("lengths: randx %i, myx %i, myy %i, myc %i",
+            length(randx), length(myx), length(myy), length(myc)))
+    message(sprintf("lengths:  xplt %i, yplt %i",
+            length(xplt), length(yplt)))
+  }
   points(xplt[myx[randx]],yplt[myy[randx]],col=myc[randx],pch=15,cex=.6)
 
   # add loess fits as in Cope et al. Bioinformatics 20:323-331 (2004), Fig.2
@@ -730,9 +747,10 @@ scatterplot = function (normmat, attribs, plotdata, plot2file = FALSE, plotIDOff
             side = 2, line = 2, cex = 0.75)
       mtext(sprintf('(%1.2f, %1.2f, %1.2f, %1.2f, %1.2f)',
                     yrange[1], yrange[2], yrange[3], yrange[4], yrange[5]),
-            side = 1, line = 2, cex = 0.75)
+         side = 1, line = 2, cex = 0.75)
       if(plot2file) dev.off()
     }  # end of j loop
+    n
   }  # end of i loop
 }  # end of scatterplot function
 
