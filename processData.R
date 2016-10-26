@@ -417,7 +417,6 @@ designRatios = function (normmat, attribs, ratioby_ls,
 #   rcut_fold = linear scale number for min best abs ratio required
 #   icut_fold = linear scale number for mean fold above min(normmat) required #Feedback the difference between these two is not clear to me
 #   => include elements to execute cuts; omit to skip
-
   # arguments
 
   # q-value cuts

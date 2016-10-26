@@ -1,7 +1,7 @@
 #####################################################################################################
 # Functions useful for microarray analysis.
 #
-# convertCELtoNonNormMat           --- read CEL files and output matrix of intensities
+# processCELfiles           --- read CEL files and output matrix of intensities
 #
 # Authors: Mark Fisher
 # Started - October, 2016
@@ -55,4 +55,4 @@ processCELfiles = function(pathToCELfiles){
     print(paste("Done with convertCELtoNonNormMat"))
     return(return_val)
   }) # END tryCatch
-} #END convertCELtoNonNormMat
+} #END processCELfiles

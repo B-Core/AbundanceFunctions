@@ -27,26 +27,26 @@ qcQ_wrapper = function(norm_x, p_mat, q_list, metadata, plotdata, plot2file = TR
 # Arguments
 #   norm_x: abundance data input into regression (eg, regressMatrix()). nrow(norm_x)==length(p_mat)
 #   p_mat: matrix of p-values for each factor. Returned by regressMatrix()
-#   q_list: S3 object; list of p-value lists for each factor. Returned by regressMatrix()
-#   metadata: list of factors; each list element is a factor (eg, sex = c("m", "f"...))
+#   q_list: S3 object; list of p-value lists for each factor. Returned by regressMatrix() #Feedback supposed to be q-value lists?
+#   metadata: list of factors; each list element is a factor (eg, sex = c("m", "f"...)) #Feedback perhaps as.factor(c("m","f"))?
 #             Vector order same as norm_x column order
 #             was attribs
-#   plotdata is a list of info relevant to labeling and saving the plot
+#   plotdata is a list of info relevant to labeling and saving the plot #Feedback with the following elements:
 #     plotdir:  plot destination directory
 #     plotbase:  base filename for the plot. Suggest: bias reduction method
 #     plottitle:  title for all plots
 #     plotSubtitle:  optional subtitle; suggest lm_expression
-#   plot2file if TRUE, otherwise to stdio...
+#   plot2file if TRUE, otherwise to studio...
 #   bonusMDS: if TRUE plots an MDS of data at qcut (see below)
-#   oneclass: metadata factor for labeling bonusMDS data;
-#             if not specified, defaults to the first element of metadata
+#   oneclass: metadata factor for labeling bonusMDS data; #Feedback is this actually a factor, or is it a vector?
+#             if NULL or not specified, defaults to the first element of metadata
 #   qcut: either a number between 0 and 1 used as an upper qvalue limit for MDS,
 #     OR a number >1, assumed to be the top n qvalues to use in MDS
 #   histbins: # bins for p-value histogram; may want to change if there is suspicious behavior
 #   colorspec: optional range of colors for MDS plot. Defaults to hotpink/green!
-#   facSel: optional vector of experimental factors to plot (rather than all factors)
-#   
-# Returns... Error message or...
+#   facSel: optional vector of experimental factors to plot (rather than all factors) #Feedback to plot for the MDS plot? What if you want to plot based on second element of metadata list?
+#   #Feedback what about filesep?
+# Returns... Error message or... #Feeback LOL! Thank you for the good humor!!
 #
   
   # Define factors to plot
@@ -102,7 +102,7 @@ qcQ_wrapper = function(norm_x, p_mat, q_list, metadata, plotdata, plot2file = TR
       qcQvalues(norm_x = norm_x, pvalue_v = p_mat[,factor], obj_qvalue = q_list[[factor]],
                 qcut = qcut, attribs = metadata, oneclass = oneclass, plotdata = plotdata,
                 colorspec = colorspec, histbins=histbins, plot2file = plot2file,
-                p_hist=TRUE, q_plots=TRUE, MDS_plot=bonusMDS, filesep=filesep)
+                p_hist=TRUE, q_plots=TRUE, MDS_plot=bonusMDS, filesep=filesep) #Feedback where does qcQvalues actually get defined?
     }
   }
   return("qcQ_wrapper done!")
