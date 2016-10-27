@@ -279,17 +279,17 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
   # 2D histogram
   nbins = histbins*expand.2D
   yl = range(sdmat, na.rm=T)
-  ybin = seq(from=yl[1]*(1-1/nbins),to=yl[2]*(1-1/nbins),length.out=nbins+1)
+  ybin = seq(from=yl[1],to=yl[2],length.out=nbins+1)
   yplt = filter(ybin,filter=c(.5,.5),sides=1)[2:(nbins+1)]
   xl = range(normmat[row_mk,], na.rm=T)
-  xbin = seq(from=xl[1]*(1-1/nbins),to=xl[2]*(1-1/nbins),length.out=nbins+1)
+  xbin = seq(from=xl[1],to=xl[2],length.out=nbins+1) 
   xplt = filter(xbin,filter=c(.5,.5),sides=1)[2:(nbins+1)]
   cmax = log2(nrow(sdmat)/nbins)
   # calculate x, y, color
   freq = NULL;
   for(i in 1:ncol( sdmat ) ){
     # frequency of abundance vs SD as binned
-    freq[[i]] = as.data.table(table( findInterval(int_mat[,i],xbin), findInterval(sdmat[,i],ybin) ))
+    freq[[i]] = as.data.table(table( findInterval(int_mat[,i],xbin,all.inside=T), findInterval(sdmat[,i],ybin,all.inside=T) ))
     freq[[i]] = freq[[i]][,V1:=as.numeric(V1)]
     freq[[i]] = freq[[i]][,V2:=as.numeric(V2)]
     freq[[i]] = freq[[i]][,N:=log2(N+1)]
