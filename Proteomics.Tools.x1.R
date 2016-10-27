@@ -70,7 +70,7 @@ maplot = function (v1, v2, v12names, plotdata, yrange = NULL, plot2file = FALSE,
 #  plot2file:  if true, plot to file as specified in plotdata
 #  plotIDOffset:  offset value for the plot ID... default to zero
 
-  plotID = 4 + plotIDOffset
+  plotID = 5 + plotIDOffset
   plotDesc = sprintf('MA_%s.vs.%s', v12names$v1, v12names$v2) 
   if(plot2file) {
   png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
@@ -246,11 +246,12 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
   sdmat = NULL; int_mat = NULL
   # find rows informative on SD for all classes
   row_mk = logical(nrow(normmat)); row_mk[] = TRUE
+  # Create a mask indicating which rows have at least 1 measurement per samp.class
   for( myclass in u.samp.classes ){
     row_mk = row_mk & rowSums(!is.na(normmat[,samp.classes==myclass]))>1
     if(verbose) {message(sprintf("Masked rows for %s = %i", myclass, sum(row_mk)))}
   }
-  # calculate SDs and intensities
+  # calculate mean and SDs for intensities by samp.classes
   for( myclass in u.samp.classes ){
     int_mat = cbind(int_mat, rowMeans(normmat[row_mk,samp.classes==myclass],na.rm=T))
     if(sum(samp.classes==myclass)>1){
@@ -276,8 +277,12 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
     col2 = unique(colvec[samp.classes==colnames(sdmat)[j] ])[1]
     collist = c(collist, list(colorRampPalette( colors=c( adjustcolor(col1, alpha.f=.85), adjustcolor( col2, alpha.f=0.85) ), alpha=T)(ncols) ) )
   }
+
   # 2D histogram
   nbins = histbins*expand.2D
+  # Set the y (SD) and x (mean) bin sizes based on the range of the masked abundance data
+  # bin[n:(n+1)] defines the range of values included in the bin
+  # plt[n] defines the center point for plotting
   yl = range(sdmat, na.rm=T)
   ybin = seq(from=yl[1],to=yl[2],length.out=nbins+1)
   yplt = filter(ybin,filter=c(.5,.5),sides=1)[2:(nbins+1)]
@@ -299,6 +304,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
     # trim empty bins
     freq[[i]] = freq[[i]][N>0,]
   }
+  
   # make single x, y, color vecs -- alpha seems to have limits
   myx = NULL; myy = NULL; myc = NULL
   for(i in 1:ncol( sdmat ) ){
@@ -318,7 +324,13 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
             length(randx), length(myx), length(myy), length(myc)))
     message(sprintf("lengths:  xplt %i, yplt %i",
             length(xplt), length(yplt)))
+    message(sprintf("lengths:  my[rand] x %i, y %i, c %i",
+            length(myx[randx]), length(myy[randx]), length(myc[randx])))
+    message(sprintf("lengths:  plt[my[rand]] x %i, y %i, c %i",
+            length(xplt[myx[randx]]), length(yplt[myy[randx]]), length(myc[randx])))
+return(list(randx=randx, myx=myx, myx.randx=myx[randx], xplt=xplt, xplt.myx.randx=xplt[myx[randx]], myy=myy))
   }
+
   points(xplt[myx[randx]],yplt[myy[randx]],col=myc[randx],pch=15,cex=.6)
 
   # add loess fits as in Cope et al. Bioinformatics 20:323-331 (2004), Fig.2
@@ -334,7 +346,7 @@ summary.plots = function (rawmat, normmat, mynorm, samp.labels, samp.classes, co
 
   if(plot2file) dev.off()
 
-}
+}#
 
 # ******** Abundance QC MDS & Heatmap ******************************************
 qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
@@ -372,7 +384,7 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
   }
 
 
-  plotID = 5
+  plotID = 6
   plotDesc = 'Heatmap' 
   if(plot2file) {
   png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
@@ -398,7 +410,7 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
   if(plot2file) dev.off()
 
 
-  plotID = 6
+  plotID = 7
   plotDesc = 'MDS' 
   if(plot2file) {
   png(filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc),
