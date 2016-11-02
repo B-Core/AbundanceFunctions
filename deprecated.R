@@ -5,7 +5,10 @@
 #                  <== Removed from RNAseq_abundance_functions.R
 #                  ==> Replaced by normMatrix in processData.R
 #                      15-Oct-2016
-#
+# make_heatmap_versatile --- Makes a heat map using the NMF aheatmap function, using only some columns
+#                  <== Removed from abundance_functions.R
+#                  ==> Replaced by makeHeatmap currently in Proteomics.Tools.x1.R
+#                      28-Oct-2016
 ###############################################################################
 
 
@@ -107,4 +110,80 @@ norm_matrix = function(tag, raw.mat, expt.design,
 
   # return list of normalized matrices
   return(LoM.norm)
+}
+
+make_heatmap_versatile = function(matrix_with_samples_for_sig_IDs, sample_string_vec, gsub_remove_str='', annotation_mat=NULL, annotate_with_gene_names = F, ID_colname=NULL, Symbol_colname=NULL, save_image_file=F, string_to_lead_file_name_with = "", c.lim=NULL, annCol=NULL, main=NULL, reso=600){
+  #Makes a heat map using the NMF aheatmap function, using only the columns of a matrix in sample_string_vec
+  #matrix_with_samples_for_sig_IDs is a matrix containing all rows with with you want to make a heatmap. It can contain some columns you don't want, because you specify which columns you want in sample_string_vec. Assumes that matrix_with_samples_for_sig_IDs already has rownames of ID (e.g., transcript cluster ID).
+  #sample_string_vec is a vector of column names that you want to use to contstruct the heatmap. The most permissive thing you can do is sample_string_vec=colnames(matrix_with_samples_for_sig_IDs).
+  #gsub_remove_str: let's say that your column names are very long, and you don't want to label the columns of your heat map with them. You would provide a regular expression pattern in gsub_remove_str, and it will REMOVE things that match that pattern when naming the columns in the heat map.
+  #annotation_mat is a matrix containing at the very least a column of IDs (can be longer than rownames(matrix_with_samples_for_sig_IDs)), and a column of something else (e.g., gene symbols) that match those IDs. To be used in case, say, you want to annotate the rows of the heat map with gene symbols instead of transcript cluster IDs.
+  #annotate_with_gene_names a boolean deciding whether you want to annotate the heat map using annotation_mat
+  #ID_colname is the column name in annotation_mat that contains the IDs of the same type as in rownames(matrix_with_samples_for_sig_IDs), e.g. transcript cluster ID
+  #Symbol_colname is the column name in annotation_mat that contains the values (e.g, gene symbols) that the user actually wants to annotate the heat map with
+  #save_image_file is a boolean specifying whether 600 dpi png files should be saved or not
+  #string_to_lead_file_name_with is a string the represents the first part of the file name to be saved. Can also be used to specify the destination path of the save file if not current working directory.
+  #c.lim are the limits in which most of the color variation of the heat map will occur. The min. and max values will also be included in the heat map color range, but everything between them and the c.lim range will be the darkest two colors.
+  #Needs Ann_col argument
+  #Needs color list arguments for the different tracks
+  if(is.null(c.lim)){
+    c.lim = quantile(matrix_with_samples_for_sig_IDs[,sample_string_vec], probs=.95,na.rm=T)
+  }
+  subset_of_mat_of_interest = matrix_with_samples_for_sig_IDs[,sample_string_vec]
+  class(subset_of_mat_of_interest) = "numeric"
+  if(is.null(annCol)){
+    annCol=gsub(gsub_remove_str, '',sample_string_vec)
+  }
+  #c.lim = quantile(subset_of_mat_of_interest, probs=.95,na.rm=T)
+  if(class(subset_of_mat_of_interest) != "matrix"){
+    subset_of_mat_of_interest = t(as.matrix(subset_of_mat_of_interest))
+  }
+  if(ncol(subset_of_mat_of_interest)>2 & nrow(subset_of_mat_of_interest)>1){
+    if(annotate_with_gene_names ==F){
+      tmp=aheatmap(subset_of_mat_of_interest,color=paste0("-PiYG:", nrow(matrix_with_samples_for_sig_IDs)), breaks=c(min(subset_of_mat_of_interest),seq(from=-c.lim,to=c.lim, by=c.lim/((nrow(matrix_with_samples_for_sig_IDs)-2)/2)), max(subset_of_mat_of_interest)),annCol=annCol,labCol=gsub(gsub_remove_str, '',sample_string_vec),labRow = rep(" ", nrow(subset_of_mat_of_interest)))
+      #print(tmp)
+      indices_in_heat_map_order = rev(tmp$rowInd)
+      ordered_probeset_ids = rownames(subset_of_mat_of_interest) [indices_in_heat_map_order]
+      ordered_actual_values = subset_of_mat_of_interest[indices_in_heat_map_order,]
+      if(save_image_file==T){
+        png(filename=paste0(string_to_lead_file_name_with,"_heatmap.png"),width=5,height=5.4,units="in",res=reso)
+        #print(tmp)
+        tmp=aheatmap(subset_of_mat_of_interest,color=paste0("-PiYG:", nrow(matrix_with_samples_for_sig_IDs)), breaks=c(min(subset_of_mat_of_interest),seq(from=-c.lim,to=c.lim, by=c.lim/((nrow(matrix_with_samples_for_sig_IDs)-2)/2)), max(subset_of_mat_of_interest)),annCol=annCol,labCol=gsub(gsub_remove_str, '',sample_string_vec),labRow = rep(" ", nrow(subset_of_mat_of_interest)))
+        dev.off()
+      }
+      return(list(ordered_probeset_ids, ordered_actual_values,tmp))
+    } else{
+      #then annotate_with_gene_names =T
+      ##Find the gene names that correpond to rownames of subset_of_mat_of_interest
+      gn_names = vec_of_gene_symbols_given_vec_of_IDs(vec_of_IDs=rownames(subset_of_mat_of_interest), master_mat=annotation_mat, gene_symbol_colname_in_master=Symbol_colname, ID_colname_in_master=ID_colname)
+      tmp=aheatmap(subset_of_mat_of_interest,color=paste0("-PiYG:", nrow(matrix_with_samples_for_sig_IDs)), breaks=c(min(subset_of_mat_of_interest),seq(from=-c.lim,to=c.lim, by=c.lim/((nrow(matrix_with_samples_for_sig_IDs)-2)/2)), max(subset_of_mat_of_interest)),annCol=annCol,labCol=gsub(gsub_remove_str, '',sample_string_vec),labRow = gn_names)
+      #print(tmp)
+      indices_in_heat_map_order = rev(tmp$rowInd)
+      col_indices_in_heat_map_order = tmp$colInd
+      ordered_probeset_ids = rownames(subset_of_mat_of_interest) [indices_in_heat_map_order]
+      ordered_gene_ids = vec_of_gene_symbols_given_vec_of_IDs(vec_of_IDs=ordered_probeset_ids, master_mat=annotation_mat, gene_symbol_colname_in_master=Symbol_colname, ID_colname_in_master=ID_colname)
+      ordered_actual_values = subset_of_mat_of_interest[indices_in_heat_map_order,col_indices_in_heat_map_order]
+      if(save_image_file==T){
+        png(filename=paste0(string_to_lead_file_name_with,"_heatmap.png"),width=5,height=5.4,units="in",res=reso)
+        tmp=aheatmap(subset_of_mat_of_interest,color=paste0("-PiYG:", nrow(matrix_with_samples_for_sig_IDs)), breaks=c(min(subset_of_mat_of_interest),seq(from=-c.lim,to=c.lim, by=c.lim/((nrow(matrix_with_samples_for_sig_IDs)-2)/2)), max(subset_of_mat_of_interest)),annCol=annCol,labCol=gsub(gsub_remove_str, '',sample_string_vec),labRow = gn_names)
+        dev.off()
+      }
+      return(list(ordered_probeset_ids, ordered_gene_ids, ordered_actual_values,tmp))
+    }
+  } else{
+    return("")
+  }
+}
+
+convertEnsemblToBed = function(Ensembl_mat, justThreeCols=F){
+  chromName = gsub('^ *', '', Ensembl_mat[,1])
+  chromName = gsub('^chr', '', Ensembl_mat[,1])
+  start = as.numeric(Ensembl_mat[,2])-1
+  end = as.numeric(Ensembl_mat[,3])
+  if(justThreeCols == T){
+    final_mat = cbind(chromName, start, end)
+  }else{
+    final_mat = cbind(chromName, start, end, Ensembl_mat[,4:ncol(Ensembl_mat)])
+  }
+  return(final_mat)
 }
