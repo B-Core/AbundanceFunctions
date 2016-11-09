@@ -367,6 +367,7 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
 #    plottitle:  title for all plots
 #  colorspec is a vector of color specifiers for colorRampPalette  
 #  center:  center data on 'norm' for normalized average
+#           none indicates no-centering needed for zero-centered data
 #           any other value will trigger centering on the average of rawmat
 #  clim.pct:  0:1 - fraction of data to limit max color
 #  mask:  NULL default masks rows with SD > SD of entire data set; 
@@ -395,6 +396,8 @@ qc.clusters = function (normmat, rawmat, attribs, oneclass, plotdata,
   if(center == 'norm') {
     ratiomat = sweep(normmat, 1, rowMeans(normmat,na.rm=T), '-')
     message(sprintf('centered on norm, max=%1.3f, min=%1.3f', max(ratiomat,na.rm=T), min(ratiomat,na.rm=T)))
+  } else if (center == 'none') {
+    ratiomat = normmat
   } else ratiomat = sweep(normmat, 1, rowMeans(rawmat,na.rm=T), '-')
   
   # Determine a lower threshold for data of interest
@@ -756,10 +759,10 @@ scatterplot = function (normmat, attribs, plotdata, plot2file = FALSE, plotIDOff
             main = plotdata$plottitle)
       mtext(sprintf('(%1.2f, %1.2f, %1.2f, %1.2f, %1.2f)',
                     xrange[1], xrange[2], xrange[3], xrange[4], xrange[5]),
-            side = 2, line = 2, cex = 0.75)
+            side = 1, line = 2, cex = 0.75)
       mtext(sprintf('(%1.2f, %1.2f, %1.2f, %1.2f, %1.2f)',
                     yrange[1], yrange[2], yrange[3], yrange[4], yrange[5]),
-         side = 1, line = 2, cex = 0.75)
+            side = 2, line = 2, cex = 0.75)
       if(plot2file) dev.off()
     }  # end of j loop
     n
