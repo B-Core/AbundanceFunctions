@@ -7,7 +7,7 @@
 # summary.plots    --- Creates box, scatter, density and SD/mean plots
 # qc.clusters      --- Plot heatmap and MDS for abundance data
 #                  --- Makes avg-all ratios for heatmap, drops small SD rows
-# qcQvalue         --- Plot p-value histogram, q-value auto-qc & MDS w q-cut
+# qcQvalues         --- Plot p-value histogram, q-value auto-qc & MDS w q-cut
 # plotRatios       --- Plot heatmap and MDS for ratio data
 # scatterplot      --- X-Y Scatter plot
 # makeMDSplot      --- MDS plot child function called by qc functions
