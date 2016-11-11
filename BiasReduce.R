@@ -10,15 +10,16 @@
 
 normMatrix <-
 function(tag, raw.mat, expt.design, 
-                normvec=c("loess","qspln","quant"), 
-                normFUN=c("normalizeLoess","normalize.qspline","preprocessCore:::normalize.quantiles"), 
-                normarg=list( loess=list(method="loess"),
-                             qspln=list(samples=c( max(round(nrow(raw.mat)/1000), 100),12*nrow(raw.mat)^(-.7)),na.rm=TRUE),
-                             quant=list(copy=c(TRUE,FALSE))), 
-                normPkg=c("affy","affy","affy"), 
-                depth.est = list(upper.quartile=0.75, max=1), 
-                bkgdFUN=function(x,probs=.75){quantile(x,probs=probs,na.rm=TRUE)/10^(max(c(trunc(log10(quantile(x,probs=probs,na.rm=TRUE)))-1,1)) )} 
-                ){
+         normvec=c("loess","qspln","quant"), 
+         normFUN=c("normalizeLoess","normalize.qspline","preprocessCore:::normalize.quantiles"), 
+         normarg=list( loess=list(method="loess"),
+                       qspln=list(samples=c( val1 = "default", val2 = "default"),na.rm=TRUE),
+###                    qspln=list(samples=c( max(round(nrow(raw.mat)/1000), 100),12*nrow(raw.mat)^(-.7)),na.rm=TRUE),
+                       quant=list(copy=c(TRUE,FALSE))), 
+         normPkg=c("affy","affy","affy"), 
+         depth.est = list(upper.quartile=0.75, max=1), 
+         bkgdFUN=function(x,probs=.75){quantile(x,probs=probs,na.rm=TRUE)/10^(max(c(trunc(log10(quantile(x,probs=probs,na.rm=TRUE)))-1,1)) )} )
+         {
   # Add lograw to normvec ##Feedback ##TS ##MF
   # apply bias reduction functions to abundance data
   # tag: string identifier for output files. suggest including data type.
@@ -46,7 +47,12 @@ function(tag, raw.mat, expt.design,
   for(i in 1:length(uPkg) ){
     eval(parse(text=paste('require(',uPkg[i],')')))
   }
-  
+
+  # Set qspline normarg values if not otherwise specified
+  if(normarg$qspln$samples['val1'] == "default") {normarg$qspln$samples[1] = max(round(nrow(raw.mat)/1000), 100) }
+  if(normarg$qspln$samples['val2'] == "default") {normarg$qspln$samples[2] = 12*nrow(raw.mat)^(-.7) }
+  normarg$qspln$samples = as.numeric(normarg$qspln$samples)
+
   # depth estimate(s)
   for(mystat in names(depth.est)){
     cat(mystat,'of total units per sample\n')
@@ -80,8 +86,8 @@ function(tag, raw.mat, expt.design,
     } else if( any(lengths(myargs)>1) ){
       myflag = FALSE
       LoM.norm[[mynorm]] = tryCatch(
-      log2(do.call( myf,c(list(raw.mat+bkgd),lapply(myargs,FUN=function(x){x[1]})) )),
-      error=function(e){myflag=TRUE; log2(do.call( myf,c(list(raw.mat+bkgd),lapply(myargs,FUN=function(x){x[min(c(2,length(x)))]} )) )) } 
+        log2(do.call( myf,c(list(raw.mat+bkgd),lapply(myargs,FUN=function(x){x[1]})) )),
+        error=function(e){myflag=TRUE; log2(do.call( myf,c(list(raw.mat+bkgd),lapply(myargs,FUN=function(x){x[min(c(2,length(x)))]} )) )) } 
       )
       cat(mynorm,": ran with 2 args :",if(myflag){unlist(lapply(myargs,FUN=function(x){x[min(c(2,length(x)))]} ))
       }else{ unlist(lapply(myargs,FUN=function(x){x[1]})) },"\n")
