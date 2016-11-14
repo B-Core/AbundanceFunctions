@@ -26,7 +26,7 @@ function(normalized_matrix_with_rownames, probe_ID_vec, custom_ID_vec){
   colnames(ready_for_summarization) = colnames(normalized_matrix_with_rownames)
   sData = oligo::summarize(ready_for_summarization, method="medianpolish")
   out_dt = as.data.table(sData)
-  out_dt$probeset_id = rownames(sData)
+  #out_dt$probeset_id = rownames(sData)
   rownames(out_dt) = rownames(sData)
   return(out_dt)
 }
