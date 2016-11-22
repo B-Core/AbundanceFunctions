@@ -308,6 +308,7 @@ function(pathToCELfiles){
   #' test3_ls = processCELfiles(path2CELfiles3)
   #' test3_mat = test3_ls[[2]]
   #' @export
+  require(oligo)
   
   tryCatch({
     eCELs = list.celfiles(pathToCELfiles,full.names=T)

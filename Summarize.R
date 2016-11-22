@@ -11,25 +11,33 @@
 
 
 Summarize_by_some_custom_ID <-
-function(normalized_matrix_with_rownames, probe_ID_vec, custom_ID_vec){
-  #hasn't been troubleshooted yet for what happens when nrow(normalized_matrix_with_rownames) is smaller than length(custom_ID_vec)
-  #Maps the probe IDs to the matrix. Assumes that the probe_ID_vec is ALREADY MAPPED CORRECTLY to the custom_ID_vec (i.e., they should be the same length and correspond to one another).
-  #normalized_matrix_with_rownames is a matrix of normalized data on a linear scale.
-  #probe_ID_vec is a vector of strings of IDs of the same type/ilk as rownames(normalized_matrix_with_rownames)
-  #custom_ID_vec is a vector of strings of IDs to which those probes/IDs from probe_ID_vec are to be collapsed/summarized
-  idx2=match(probe_ID_vec,rownames(normalized_matrix_with_rownames)) #position in y where x is
+function(normalized_matrix_with_rownames, feature_ID_vec, custom_ID_vec, meth="medianpolish"){
+  #' Summarizes the rows in normalized_matrix_with_rownames on the basis of those rownames that are found in feature_ID_vec.
+  #' @description  hasn't been troubleshooted yet for what happens when nrow(normalized_matrix_with_rownames) is smaller than length(custom_ID_vec)
+  #' Maps the probe IDs in feature_ID_vec to the same rownames in the matrix. Assumes that the feature_ID_vec is ALREADY MAPPED CORRECTLY to the custom_ID_vec (i.e., they should be the same length and correspond to one another). custom_ID_vec could contain probeset IDs or something else entirely.
+  #' @param normalized_matrix_with_rownames is a matrix of normalized data on a linear scale. It's rownames should be feature IDs (e.g., probe IDs for microarrays)
+  #' @param feature_ID_vec is a vector of strings of IDs of the same type/ilk as rownames(normalized_matrix_with_rownames)
+  #' @param custom_ID_vec is a vector of strings of IDs to which those probes/IDs from feature_ID_vec are to be collapsed/summarized
+  #' @return a matrix of nrow length(unique(custom_ID_vec)) with rownames %in% unique(custom_ID_vec)
+  #' @examples 
+  #' @export
+  #browser()
+  if(!(nrow(normalized_matrix_with_rownames) == length(custom_ID_vec) & length(custom_ID_vec) == length(feature_ID_vec))){
+    stop("The matrix doesn't have the same number of rows as the vectors")
+  }
+  idx2=match(feature_ID_vec,rownames(normalized_matrix_with_rownames)) #position in y where x is
   idx1=which(!is.na(idx2))
   idx2=idx2[idx1]
   ready_for_summarization=matrix(NA, ncol=ncol(normalized_matrix_with_rownames), nrow=length(custom_ID_vec))  #nrow=min(nrow(normalized_matrix_with_rownames), length(custom_ID_vec))) #probably need to test this when ncol(matrix) is smaller than length(custom_ID_vec)
-  ready_for_summarization[idx1,]=normalized_matrix_with_rownames[idx2,] 
+  ready_for_summarization[idx1,]=normalized_matrix_with_rownames[idx2,]
   rownames(ready_for_summarization)=custom_ID_vec #[idx1] #should I index by idx1 here? #there will be NAs in here if normalized_matrix_with_rownames doesn't contain all probes in the array 
   colnames(ready_for_summarization) = colnames(normalized_matrix_with_rownames)
-  sData = oligo::summarize(ready_for_summarization, method="medianpolish")
-  out_dt = as.data.table(sData)
+  sData = oligo::summarize(ready_for_summarization, method=meth)
+  #out_mat = as.data.table(sData)
   #out_dt$probeset_id = rownames(sData)
-  rownames(out_dt) = rownames(sData)
-  return(out_dt)
-}
+  #rownames(out_dt) = rownames(sData)
+  return(sData)
+} #END Summarize_by_some_custom_ID
 Remove_mulimappers_and_return_probe_IDs <-
 function(vec_of_probe_IDs, vec_of_probeset_IDs){
   #Takes as arguments a vector of probesetID and a vector of probes. Asks how many probesets are using each of the probes in that vector. Returns only those probes that are not used by more than one probeset.
