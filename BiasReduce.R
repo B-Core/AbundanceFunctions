@@ -11,8 +11,13 @@
 normMatrix <-
 function(tag, raw.mat, expt.design, 
          normvec=c("loess","qspln","quant"), 
-         normFUN=c("normalizeLoess","normalize.qspline","preprocessCore:::normalize.quantiles"), 
+         normFUN=c(loess = "normalizeLoess",
+                   lowess = "normalizeLoess",
+                   qspln = "normalize.qspline",
+                   quant = "preprocessCore:::normalize.quantiles"), 
+###         normFUN=c("normalizeLoess","normalize.qspline","preprocessCore:::normalize.quantiles"), 
          normarg=list( loess=list(method="loess"),
+                       lowess = list(method="lowess"),
                        qspln=list(samples=c( val1 = "default", val2 = "default"),na.rm=TRUE),
 ###                    qspln=list(samples=c( max(round(nrow(raw.mat)/1000), 100),12*nrow(raw.mat)^(-.7)),na.rm=TRUE),
                        quant=list(copy=c(TRUE,FALSE))), 
@@ -71,8 +76,10 @@ function(tag, raw.mat, expt.design,
   message(sprintf("mynorm = %s", mynorm))
   LoM.norm[[mynorm]] = log2(raw.mat+1)
 
-  for( i in 1:length(normvec) ){
-    mynorm = normvec[i]
+###  for( i in 1:length(normvec) ){
+
+  for( i in normvec ){
+    mynorm = i
     myargs = normarg[[i]]
     if(grepl(':::',normFUN[i]) ){
       ans = strsplit(normFUN[i],':::')
