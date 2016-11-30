@@ -13,17 +13,19 @@
 Summarize_by_some_custom_ID <-
 function(normalized_matrix_with_rownames, feature_ID_vec, custom_ID_vec, meth="medianpolish"){
   #' Summarizes the rows in normalized_matrix_with_rownames on the basis of those rownames that are found in feature_ID_vec.
-  #' @description  hasn't been troubleshooted yet for what happens when nrow(normalized_matrix_with_rownames) is smaller than length(custom_ID_vec)
+  #' @description
   #' Maps the probe IDs in feature_ID_vec to the same rownames in the matrix. Assumes that the feature_ID_vec is ALREADY MAPPED CORRECTLY to the custom_ID_vec (i.e., they should be the same length and correspond to one another). custom_ID_vec could contain probeset IDs or something else entirely.
-  #' @param normalized_matrix_with_rownames is a matrix of normalized data on a linear scale. It's rownames should be feature IDs (e.g., probe IDs for microarrays)
-  #' @param feature_ID_vec is a vector of strings of IDs of the same type/ilk as rownames(normalized_matrix_with_rownames)
-  #' @param custom_ID_vec is a vector of strings of IDs to which those probes/IDs from feature_ID_vec are to be collapsed/summarized
-  #' @return a matrix of nrow length(unique(custom_ID_vec)) with rownames %in% unique(custom_ID_vec)
-  #' @examples 
+  #' @param normalized_matrix_with_rownames a matrix of normalized data on a linear scale. It's rownames should be feature IDs (e.g., probe IDs for microarrays)
+  #' @param feature_ID_vec a vector of strings of IDs of the same type/ilk as rownames(normalized_matrix_with_rownames)
+  #' @param custom_ID_vec a vector of strings of IDs to which those probes/IDs from feature_ID_vec are to be collapsed/summarized
+  #' @param meth a string passed to oligo::summarize that specifies the summarization method.
+  #' @return a matrix of nrow <= length(unique(custom_ID_vec))
+  #' @example 
+  #' Summarize_by_some_custom_ID(microarrayProcessing_ls$NonNormalizedMatrix,feature_ID_vec=probeset_df$fid, custom_ID_vec=probeset_df$fsetid, meth="medianpolish")
   #' @export
   #browser()
-  if(!(nrow(normalized_matrix_with_rownames) == length(custom_ID_vec) & length(custom_ID_vec) == length(feature_ID_vec))){
-    stop("The matrix doesn't have the same number of rows as the vectors")
+  if(!(nrow(normalized_matrix_with_rownames) >= length(custom_ID_vec) & length(custom_ID_vec) == length(feature_ID_vec))){
+    stop("The matrix is smaller than the vectors you're using to summarize")
   }
   idx2=match(feature_ID_vec,rownames(normalized_matrix_with_rownames)) #position in y where x is
   idx1=which(!is.na(idx2))
