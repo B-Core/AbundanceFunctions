@@ -11,33 +11,45 @@
 
 
 Summarize_by_some_custom_ID <-
-function(normalized_matrix_with_rownames, feature_ID_vec, custom_ID_vec, meth="medianpolish"){
-  #' Summarizes the rows in normalized_matrix_with_rownames on the basis of those rownames that are found in feature_ID_vec.
+function(oligoFeatureSetObj=NULL, NormWithRownames_mat=NULL, customStatus=FALSE, featureID_v=NULL, customID_v=NULL, meth="medianpolish"){
+  #' Summarizes either a _FeatureSet object from the oligo package or a NormWithRownames_mat.
   #' @description
-  #' Maps the probe IDs in feature_ID_vec to the same rownames in the matrix. Assumes that the feature_ID_vec is ALREADY MAPPED CORRECTLY to the custom_ID_vec (i.e., they should be the same length and correspond to one another). custom_ID_vec could contain probeset IDs or something else entirely.
-  #' @param normalized_matrix_with_rownames a matrix of normalized data on a linear scale. It's rownames should be feature IDs (e.g., probe IDs for microarrays)
-  #' @param feature_ID_vec a vector of strings of IDs of the same type/ilk as rownames(normalized_matrix_with_rownames)
-  #' @param custom_ID_vec a vector of strings of IDs to which those probes/IDs from feature_ID_vec are to be collapsed/summarized
+  #' If the summarization occurs using a _FeatureSet (e.g., ExonFeatureSet, ExpressionFeatureSet, GeneFeatureSet, etc.) object from oligo, summarization is accomplished by applying rma() with background and normalized set to "FALSE". If using NormWithRownames_mat, the function maps the probe IDs in featureID_v to the same rownames in the matrix. Assumes that the featureID_v is ALREADY MAPPED CORRECTLY to the customID_v (i.e., they should be the same length and correspond to one another). customID_v could contain probeset IDs or something else entirely.
+  #' @param oligoFeatureSetObj a FeatureSet object generated from oligo's read.celfiles function.
+  #' @param NormWithRownames_mat a matrix of normalized data on a linear scale. It's rownames should be feature IDs (e.g., probe IDs for microarrays)
+  #' @param customStatus a boolean specifying whether the user wishes to summarize using custom vectors. If false, will use oligo::rma() with no normalization or background correction
+  #' @param featureID_v a vector of strings of IDs of the same type/ilk as rownames(NormWithRownames_mat)
+  #' @param customID_v a vector of strings of IDs to which those probes/IDs from featureID_v are to be collapsed/summarized
   #' @param meth a string passed to oligo::summarize that specifies the summarization method.
-  #' @return a matrix of nrow <= length(unique(custom_ID_vec))
+  #' @return a matrix of nrow <= length(unique(customID_v))
   #' @example 
-  #' Summarize_by_some_custom_ID(microarrayProcessing_ls$NonNormalizedMatrix,feature_ID_vec=probeset_df$fid, custom_ID_vec=probeset_df$fsetid, meth="medianpolish")
+  #' Summarize_by_some_custom_ID(microarrayProcessing_ls$NonNormalizedMatrix,featureID_v=probeset_df$fid, customID_v=probeset_df$fsetid, meth="medianpolish")
   #' @export
-  #browser()
-  if(!(nrow(normalized_matrix_with_rownames) >= length(custom_ID_vec) & length(custom_ID_vec) == length(feature_ID_vec))){
-    stop("The matrix is smaller than the vectors you're using to summarize")
+  if (customStatus==FALSE & !(is.null(oligoFeatureSetObj))){
+    tmp = oligo::rma(oligoFeatureSetObj, background=F, normalize=F)
+    sData = exprs(tmp)
+  }else{
+    if(!(nrow(NormWithRownames_mat) >= length(unique(customID_v)))){
+      stop("The matrix is alredy smaller than the number of IDs you're trying to collapse it to.")
+    }
+    if(!(length(customID_v) == length(featureID_v))){
+      stop("The vectors are not the same length as one another.")
+    }
+    if(is.null(NormWithRownames_mat)){
+      stop("No normalized matrix supplied to summarization function")
+    }
+    idx2=match(featureID_v,rownames(NormWithRownames_mat)) #position in y where x is
+    idx1=which(!is.na(idx2))
+    idx2=idx2[idx1]
+    ready_for_summarization=matrix(NA, ncol=ncol(NormWithRownames_mat), nrow=length(customID_v))  #nrow=min(nrow(NormWithRownames_mat), length(customID_v))) #probably need to test this when ncol(matrix) is smaller than length(customID_v)
+    ready_for_summarization[idx1,]=NormWithRownames_mat[idx2,]
+    rownames(ready_for_summarization)=customID_v #[idx1] #should I index by idx1 here? #there will be NAs in here if NormWithRownames_mat doesn't contain all probes in the array 
+    colnames(ready_for_summarization) = colnames(NormWithRownames_mat)
+    sData = oligo::summarize(ready_for_summarization, method=meth)
+    #out_mat = as.data.table(sData)
+    #out_dt$probeset_id = rownames(sData)
+    #rownames(out_dt) = rownames(sData)
   }
-  idx2=match(feature_ID_vec,rownames(normalized_matrix_with_rownames)) #position in y where x is
-  idx1=which(!is.na(idx2))
-  idx2=idx2[idx1]
-  ready_for_summarization=matrix(NA, ncol=ncol(normalized_matrix_with_rownames), nrow=length(custom_ID_vec))  #nrow=min(nrow(normalized_matrix_with_rownames), length(custom_ID_vec))) #probably need to test this when ncol(matrix) is smaller than length(custom_ID_vec)
-  ready_for_summarization[idx1,]=normalized_matrix_with_rownames[idx2,]
-  rownames(ready_for_summarization)=custom_ID_vec #[idx1] #should I index by idx1 here? #there will be NAs in here if normalized_matrix_with_rownames doesn't contain all probes in the array 
-  colnames(ready_for_summarization) = colnames(normalized_matrix_with_rownames)
-  sData = oligo::summarize(ready_for_summarization, method=meth)
-  #out_mat = as.data.table(sData)
-  #out_dt$probeset_id = rownames(sData)
-  #rownames(out_dt) = rownames(sData)
   return(sData)
 } #END Summarize_by_some_custom_ID
 Remove_mulimappers_and_return_probe_IDs <-
@@ -50,26 +62,26 @@ function(vec_of_probe_IDs, vec_of_probeset_IDs){
   return(non_multiple_mappers)
 }
 complex_process_probes <-
-function(probe_mat,probe_ID_vec, custom_ID_vec, quantile_to_remove=0.99999){
+function(probe_mat,probe_ID_vec, customID_v, quantile_to_remove=0.99999){
   ##For arrays like the HTA array, takes a matrix of probe instensities with rownames and colnames and summarizes it, removed extremely variariable probes and summarizes again, removed multi-mappers except in the case where that means removing all probes mapping to a probe set and summarizes again, then takes log ratio to average all for some of these. Returns a list of many different kinds of output.
   #probe_mat is the matrix of feature intensities, with rownames and colnames
-  #probe_ID_vec is a vector of probe IDs corresponding EXACTLY to the probe set IDs in custom_ID_vec (see below)
-  #custom_ID_vec is a vector of custom probe set IDs (e.g., for HTA, probes can map to transcript clusters or to exons. Those probe set IDs will be different)
+  #probe_ID_vec is a vector of probe IDs corresponding EXACTLY to the probe set IDs in customID_v (see below)
+  #customID_v is a vector of custom probe set IDs (e.g., for HTA, probes can map to transcript clusters or to exons. Those probe set IDs will be different)
   #quantile_to_remove is essentially the percentile of wildly variable probes you want to remove from the data set before summarization.
   
-  summarized_including_all = Summarize_by_some_custom_ID(probe_mat, probe_ID_vec, custom_ID_vec)
+  summarized_including_all = Summarize_by_some_custom_ID(probe_mat, probe_ID_vec, customID_v)
   summarized_including_all = summarized_including_all[order(probeset_id)]
   crazies_removed = Rm_quantile_of_very_different_intensities(probe_mat,quantile_to_remove)
   probe_mats_ls = list(probe_mat,crazies_removed)
-  summarized_crazies_removed = Summarize_by_some_custom_ID(crazies_removed, probe_ID_vec, custom_ID_vec)
+  summarized_crazies_removed = Summarize_by_some_custom_ID(crazies_removed, probe_ID_vec, customID_v)
   summarized_crazies_removed = summarized_crazies_removed[order(probeset_id)]
   #Find multi-mappers
-  non_multiple_mapper_probes = Remove_mulimappers_and_return_probe_IDs(probe_ID_vec, custom_ID_vec)
+  non_multiple_mapper_probes = Remove_mulimappers_and_return_probe_IDs(probe_ID_vec, customID_v)
   #Remove multi-mappers
   idx_in_arg2_with_no_multi = match(non_multiple_mapper_probes,probe_ID_vec)
   idx1=which(!is.na(idx_in_arg2_with_no_multi)) 
   idx_in_arg2_with_no_multi=idx_in_arg2_with_no_multi[idx1]
-  custom_probeset_name_no_multi = custom_ID_vec[idx_in_arg2_with_no_multi]
+  custom_probeset_name_no_multi = customID_v[idx_in_arg2_with_no_multi]
   no_multi_summarized =  Summarize_by_some_custom_ID(crazies_removed, non_multiple_mapper_probes, custom_probeset_name_no_multi)
   #patch those missing from no_multi_summarized with summarized_crazies_removed
   only_multi_idx = !(summarized_crazies_removed$probeset_id %chin% no_multi_summarized$probeset_id)

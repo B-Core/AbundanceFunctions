@@ -9,7 +9,7 @@
 ################################################################################
 
 normMatrix <-
-function(tag, raw.mat, expt.design, 
+function(tag, raw.mat, expt.design=NULL, 
          normvec=c("loess","qspln","quant"), 
          normFUN=c(loess = "normalizeLoess",
                    lowess = "normalizeLoess",
