@@ -11,7 +11,7 @@
 
 
 Summarize_by_some_custom_ID <-
-function(oligoFeatureSetObj=NULL, NormWithRownames_mat=NULL, customStatus=FALSE, featureID_v=NULL, customID_v=NULL, meth="medianpolish"){
+function(oligoFeatureSetObj=NULL, NormWithRownames_mat=NULL, featureID_v=NULL, customID_v=NULL, meth="medianpolish"){
   #' Summarizes either a _FeatureSet object from the oligo package or a NormWithRownames_mat.
   #' @description
   #' If the summarization occurs using a _FeatureSet (e.g., ExonFeatureSet, ExpressionFeatureSet, GeneFeatureSet, etc.) object from oligo, summarization is accomplished by applying rma() with background and normalized set to "FALSE". If using NormWithRownames_mat, the function maps the probe IDs in featureID_v to the same rownames in the matrix. Assumes that the featureID_v is ALREADY MAPPED CORRECTLY to the customID_v (i.e., they should be the same length and correspond to one another). customID_v could contain probeset IDs or something else entirely.
@@ -25,18 +25,19 @@ function(oligoFeatureSetObj=NULL, NormWithRownames_mat=NULL, customStatus=FALSE,
   #' @example 
   #' Summarize_by_some_custom_ID(microarrayProcessing_ls$NonNormalizedMatrix,featureID_v=probeset_df$fid, customID_v=probeset_df$fsetid, meth="medianpolish")
   #' @export
-  if (customStatus==FALSE & !(is.null(oligoFeatureSetObj))){
+  if (is.null(oligoFeatureSetObj) & is.null(NormWithRownames_mat)){
+    stop("_FeatureSet and/or matrix not provided")
+  }
+  if (!(is.null(oligoFeatureSetObj))){
     tmp = oligo::rma(oligoFeatureSetObj, background=F, normalize=F)
     sData = exprs(tmp)
-  }else{
+  }
+  if(!(is.null(NormWithRownames_mat))){
     if(!(nrow(NormWithRownames_mat) >= length(unique(customID_v)))){
       stop("The matrix is alredy smaller than the number of IDs you're trying to collapse it to.")
     }
     if(!(length(customID_v) == length(featureID_v))){
       stop("The vectors are not the same length as one another.")
-    }
-    if(is.null(NormWithRownames_mat)){
-      stop("No normalized matrix supplied to summarization function")
     }
     idx2=match(featureID_v,rownames(NormWithRownames_mat)) #position in y where x is
     idx1=which(!is.na(idx2))
@@ -45,7 +46,13 @@ function(oligoFeatureSetObj=NULL, NormWithRownames_mat=NULL, customStatus=FALSE,
     ready_for_summarization[idx1,]=NormWithRownames_mat[idx2,]
     rownames(ready_for_summarization)=customID_v #[idx1] #should I index by idx1 here? #there will be NAs in here if NormWithRownames_mat doesn't contain all probes in the array 
     colnames(ready_for_summarization) = colnames(NormWithRownames_mat)
-    sData = oligo::summarize(ready_for_summarization, method=meth)
+    sDataTmp = oligo::summarize(ready_for_summarization, method=meth)
+    if(exists("sData")){
+      if (nrow(sData) != nrow(sDataTmp)){
+        warning("Summarization using oligo's rma function and summarizing based on user-supplied vectors don't agree on matrix size. This likely means that you're using the inappropriate featureID_v and customID_v")
+      }
+    }
+    sData = sDataTmp
     #out_mat = as.data.table(sData)
     #out_dt$probeset_id = rownames(sData)
     #rownames(out_dt) = rownames(sData)
