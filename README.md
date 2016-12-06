@@ -27,6 +27,6 @@ summarized_mat = Summarize_by_some_custom_ID(oligoFeatureSetObj = oligoFeatureSe
 
 Another way of thinking about this is that probeset_df is not generating appropriate feature and probeset IDs.
 
-We suspect/hope that this issue might be resolved once we get a tool to process .cdf files.
+We suspect/hope that this issue might be resolved once we get a tool to process/parse .cdf files.
 
 In the meantime, Summarize\_by\_some\_custom\_ID throws a warning if the user provides oligoFeatureSetObj, NormWithRownames\_mat, featureID\_v, **and** customID\_v and the two summarized_mats don't have the same nrows().
