@@ -6,7 +6,7 @@ Author: Julja Burchard, Theresa Lusardi, Mark Fisher
 Maintainer: Who to complain to <yourfault@somewhere.net>
 Description: More about what it does (maybe more than one line)
 Depends:
-    data.table, oligo
+    data.table, oligo, affyQCReport, affy, simpleaffy
 License: MIT
 LazyData: TRUE
 RoxygenNote: 5.0.1

@@ -1,11 +1,52 @@
 ################################################################################
 # Functions specific to extraction, transformation, loading
 #
+# getaffyArrayQCreport --- Create QC report from affyQCReport package if possible
 # read_STAR       --- Read in STAR gene and splice junction count data
 # processCELfiles --- Read in Affymetrix expression microarray data
 #
 ################################################################################
 
+conductAffyArrayQC <-
+function (pathToCELfiles, destPath){
+  #' Generate a QC Report and a preliminary Array Performance Summary if possible
+  #' @description 
+  #' Attempts to generate an AffyBatch object from a given path to CEL files, and then attempts to perform the QCReport function from the affyQCReport package, and then selects a subset of the rows from simpleaffy's qc() run and exports them as a tab-delimited spreadsheet with IGL-friendly column names.
+  #' @param pathToCELfiles a string representing the path to a directory containing the CEL files of interest
+  #' @param destPath a string reprsenting the path to whic you want the QC report and precursos APS saved
+  #' @return Nothing
+  #' @example 
+  #' destPathInst = "/Users/fishema/Desktop/CEL_files_for_testing/"
+  #' path2CELfiles2 = "/Users/fishema/Desktop/CEL_files_for_testing/634SC_Set1/"
+  #' conductAffyArrayQC(pathToCELfiles = path2CELfiles2, destPath = destPathInst)
+  #' @export
+
+  # browser()
+  ## try to generate an AffyBatch object; some array types won't work with the affy package
+  try(assign("Affy_obj", ReadAffy(celfile.path = pathToCELfiles)), TRUE)
+  if(!exists("Affy_obj")){
+    message("AffyBatch object couldn't be generated")
+  }
+  if (exists("Affy_obj")){
+    message("Affy package was able to load")
+    require(affyQCReport)
+    ##Make QC report if you can
+    try(QCReport(Affy_obj,file=paste0(destPath,annotation(Affy_obj), "_QC_report.pdf")), TRUE)
+    library(simpleaffy)
+    
+    ##Make a qc Object from simpleaffy's qc() function if you can
+    try(assign("qcObj",qc(Affy_obj)),TRUE)
+    if(!exists("qcObj")){
+      message("qc function from simpleaffy package could not be applied")
+    }
+    if(exists("qcObj")){
+      message("qc function was successful")
+      APSprecursor = cbind(avbg(qcObj), percent.present(qcObj), ratios(qcObj)[,c(1,3)], spikeInProbes(qcObj))
+      colnames(APSprecursor) = c("Background", "Percent Present", "actin 3'/5'", "gapdh 3'/5'", "bioB","bioC","bioD",	"creX")
+      write.table(APSprecursor, file=paste0(destPath,"APS_precursor.txt"), sep="\t", row.names=F)
+    }
+  }
+}
 
 read_STAR <-
 function( useme.cols, label.from.colname, annCol.label, 

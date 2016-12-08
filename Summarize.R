@@ -14,10 +14,9 @@ Summarize_by_some_custom_ID <-
 function(oligoFeatureSetObj=NULL, NormWithRownames_mat=NULL, featureID_v=NULL, customID_v=NULL, meth="medianpolish"){
   #' Summarizes either a _FeatureSet object from the oligo package or a NormWithRownames_mat.
   #' @description
-  #' If the summarization occurs using a _FeatureSet (e.g., ExonFeatureSet, ExpressionFeatureSet, GeneFeatureSet, etc.) object from oligo, summarization is accomplished by applying rma() with background and normalized set to "FALSE". If using NormWithRownames_mat, the function maps the probe IDs in featureID_v to the same rownames in the matrix. Assumes that the featureID_v is ALREADY MAPPED CORRECTLY to the customID_v (i.e., they should be the same length and correspond to one another). customID_v could contain probeset IDs or something else entirely.
+  #' If the summarization occurs using a _FeatureSet (e.g., ExonFeatureSet, ExpressionFeatureSet, GeneFeatureSet, etc.) object from oligo, summarization is accomplished by applying rma() with background and normalized set to "FALSE". If using NormWithRownames_mat, the function maps the probe IDs in featureID_v to the same rownames in the matrix. If both arguments are supplied, it will return the summarization based on NormWithRownames_mat but will throw a warning if the two summarizations produce different nrows(). Assumes that the featureID_v is ALREADY MAPPED CORRECTLY to the customID_v (i.e., they should be the same length and correspond to one another). customID_v could contain probeset IDs or something else entirely.
   #' @param oligoFeatureSetObj a FeatureSet object generated from oligo's read.celfiles function.
   #' @param NormWithRownames_mat a matrix of normalized data on a linear scale. It's rownames should be feature IDs (e.g., probe IDs for microarrays)
-  #' @param customStatus a boolean specifying whether the user wishes to summarize using custom vectors. If false, will use oligo::rma() with no normalization or background correction
   #' @param featureID_v a vector of strings of IDs of the same type/ilk as rownames(NormWithRownames_mat)
   #' @param customID_v a vector of strings of IDs to which those probes/IDs from featureID_v are to be collapsed/summarized
   #' @param meth a string passed to oligo::summarize that specifies the summarization method.
