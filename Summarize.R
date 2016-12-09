@@ -12,6 +12,7 @@
 
 Summarize_by_some_custom_ID <-
 function(oligoFeatureSetObj=NULL, NormWithRownames_mat=NULL, featureID_v=NULL, customID_v=NULL, meth="medianpolish"){
+  #' Please refer to the README for comments about this function in its current implementation
   #' Summarizes either a _FeatureSet object from the oligo package or a NormWithRownames_mat.
   #' @description
   #' If the summarization occurs using a _FeatureSet (e.g., ExonFeatureSet, ExpressionFeatureSet, GeneFeatureSet, etc.) object from oligo, summarization is accomplished by applying rma() with background and normalized set to "FALSE". If using NormWithRownames_mat, the function maps the probe IDs in featureID_v to the same rownames in the matrix. If both arguments are supplied, it will return the summarization based on NormWithRownames_mat but will throw a warning if the two summarizations produce different nrows(). Assumes that the featureID_v is ALREADY MAPPED CORRECTLY to the customID_v (i.e., they should be the same length and correspond to one another). customID_v could contain probeset IDs or something else entirely.

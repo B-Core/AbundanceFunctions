@@ -23,6 +23,7 @@ function (pathToCELfiles, destPath){
 
   # browser()
   ## try to generate an AffyBatch object; some array types won't work with the affy package
+  library(affy)
   try(assign("Affy_obj", ReadAffy(celfile.path = pathToCELfiles)), TRUE)
   if(!exists("Affy_obj")){
     message("AffyBatch object couldn't be generated")
@@ -43,7 +44,7 @@ function (pathToCELfiles, destPath){
       message("qc function was successful")
       APSprecursor = cbind(avbg(qcObj), percent.present(qcObj), ratios(qcObj)[,c(1,3)], spikeInProbes(qcObj))
       colnames(APSprecursor) = c("Background", "Percent Present", "actin 3'/5'", "gapdh 3'/5'", "bioB","bioC","bioD",	"creX")
-      write.table(APSprecursor, file=paste0(destPath,"APS_precursor.txt"), sep="\t", row.names=F)
+      write.table(APSprecursor, file=paste0(destPath,annotation(Affy_obj),"_APS_precursor.txt"), sep="\t", row.names=F)
     }
   }
 }
@@ -350,7 +351,7 @@ function(pathToCELfiles){
   #' test3_mat = test3_ls[[2]]
   #' @export
   require(oligo)
-  
+  # browser()
   tryCatch({
     eCELs = list.celfiles(pathToCELfiles,full.names=T)
     Data_obj = read.celfiles(eCELs)
