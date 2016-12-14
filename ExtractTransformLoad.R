@@ -1,14 +1,31 @@
 ################################################################################
 # Functions specific to extraction, transformation, loading
 #
-# getaffyArrayQCreport --- Create QC report from affyQCReport package if possible
+# getSubstringsForTxClasses --- Parse a vector of strings (e.g. colnames(rowmat)) to extract sample-associated data
+# conductAffyArrayQC   --- Generate a QC Report and a preliminary Array Performance Summary if possible
 # read_STAR       --- Read in STAR gene and splice junction count data
 # processCELfiles --- Read in Affymetrix expression microarray data
 #
 ################################################################################
 
+getSubstringsForTxClasses = function(string_v, regExp = '[0-9]+[A-Z]_[0-9]+H[0-9]_(.*?)[0-9]?_[0-9]+?[A-Z]+\\.[A-Z]+'){
+  #' Parse a vector of strings to extract sample-associated data and provide meaningful experimental groups to arguments like samp.labels and samp.classes in the AbundanceFunctions package
+  #' @description 
+  #' Parses string_v by fetching the FIRST GROUP in the regular expression provided by regExp and returns a vector containing elements from the parse.
+  #' @param string_v a vector of strings (e.g., from colnames(rowmat)) containing parseable experimental information useful for grouping sampling.
+  #' @param regExp a regular expression with at least one group capture. Default value designed to handle GPSR sample naming conventions.
+  #' @return a vector containing unique elements of the first group capture in regExp when applied to string_v.
+  #' @example 
+  #' samp.labelsInst = getSubstringsForTxClasses(string_v=colnames(rawmat))
+  #' @export
+  grouping_v = gsub(regExp,'\\1',string_v, perl=T)
+  return(grouping_v)
+}
+
+
 conductAffyArrayQC <-
 function (pathToCELfiles, destPath){
+  #' ##Attn. #Feedback Actin 3'/5' and Gapdh 3'/5' and BioB,C,D, and CreX don't match Expression Console output. Bg and percent present do.
   #' Generate a QC Report and a preliminary Array Performance Summary if possible
   #' @description 
   #' Attempts to generate an AffyBatch object from a given path to CEL files, and then attempts to perform the QCReport function from the affyQCReport package, and then selects a subset of the rows from simpleaffy's qc() run and exports them as a tab-delimited spreadsheet with IGL-friendly column names.
@@ -30,21 +47,23 @@ function (pathToCELfiles, destPath){
   }
   if (exists("Affy_obj")){
     message("Affy package was able to load")
-    require(affyQCReport)
+    
     ##Make QC report if you can
+    require(affyQCReport)
     try(QCReport(Affy_obj,file=paste0(destPath,annotation(Affy_obj), "_QC_report.pdf")), TRUE)
-    library(simpleaffy)
     
     ##Make a qc Object from simpleaffy's qc() function if you can
+    library(simpleaffy)
     try(assign("qcObj",qc(Affy_obj)),TRUE)
     if(!exists("qcObj")){
       message("qc function from simpleaffy package could not be applied")
     }
     if(exists("qcObj")){
       message("qc function was successful")
+      # browser()
       APSprecursor = cbind(avbg(qcObj), percent.present(qcObj), ratios(qcObj)[,c(1,3)], spikeInProbes(qcObj))
       colnames(APSprecursor) = c("Background", "Percent Present", "actin 3'/5'", "gapdh 3'/5'", "bioB","bioC","bioD",	"creX")
-      write.table(APSprecursor, file=paste0(destPath,annotation(Affy_obj),"_APS_precursor.txt"), sep="\t", row.names=F)
+      write.table(APSprecursor, file=paste0(destPath,annotation(Affy_obj),"_APS_precursor.txt"), sep="\t", row.names=T)
     }
   }
 }
@@ -365,7 +384,7 @@ function(pathToCELfiles){
     print(paste("Error in processCELfiles function:  ",err))
     return_val = NULL
   }, finally = {
-    print(paste("Done with processCELfiles"))
+    message(paste("Done with processCELfiles"))
     return(return_val)
   }) # END tryCatch
 }

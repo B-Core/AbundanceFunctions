@@ -39,6 +39,10 @@ function(oligoFeatureSetObj=NULL, NormWithRownames_mat=NULL, featureID_v=NULL, c
     if(!(length(customID_v) == length(featureID_v))){
       stop("The vectors are not the same length as one another.")
     }
+    
+    ##NormWithRownames_mat gets logged again by the summarize function, so we bring it back to linear space here##
+    NormWithRownames_mat = 2^NormWithRownames_mat
+    
     idx2=match(featureID_v,rownames(NormWithRownames_mat)) #position in y where x is
     idx1=which(!is.na(idx2))
     idx2=idx2[idx1]
