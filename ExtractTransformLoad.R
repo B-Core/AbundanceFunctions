@@ -5,6 +5,8 @@
 # conductAffyArrayQC   --- Generate a QC Report and a preliminary Array Performance Summary if possible
 # read_STAR       --- Read in STAR gene and splice junction count data
 # processCELfiles --- Read in Affymetrix expression microarray data
+# Rm_quantile_of_very_different_intensities --- Removes the quant_val...th quantile of the most differing abundance metric
+# mapSJ2feature   --- genomic annotation of splice junction files
 #
 ################################################################################
 
