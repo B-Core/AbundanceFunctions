@@ -23,11 +23,14 @@ function(tag, raw.mat, expt.design=NULL,
                        quant=list(copy=c(TRUE,FALSE))), 
          normPkg=c("affy","affy","affy"), 
          depth.est = list(upper.quartile=0.75, max=1), 
-         bkgdFUN=function(x,probs=.75){quantile(x,probs=probs,na.rm=TRUE)/10^(max(c(trunc(log10(quantile(x,probs=probs,na.rm=TRUE)))-1,1)) )} )
+         bkgdFUN=function(x,probs=.75){quantile(x,probs=probs,na.rm=TRUE)/10^(max(c(trunc(log10(quantile(x,probs=probs,na.rm=TRUE)))-1,1)) )},
+          fileData_ls = list(fileDir="./", fileBase=""))
          {
   # Add lograw to normvec ##Feedback ##TS ##MF
   # apply bias reduction functions to abundance data
-  # tag: string identifier for output files. suggest including data type.
+  # fileNamedata a list #Attn. #Feedback
+  #   tag: string identifier for output files. suggest including data type.
+  #   destPath: string for path
   # raw.mat: a matrix of raw data, rownames are unique feature identifiers, column names are unique sample identifiers
   # expt.design: a named list of character vectors, each vector having one element per sample in raw.mat column order, each string representing a design factor
   # it has optional attributes: 
@@ -46,6 +49,9 @@ function(tag, raw.mat, expt.design=NULL,
   # normPkg: vector of string names of packages containing these functions
   # depth.est: named list of quantiles per sample to report to console
   # bkgdFUN: string specifying function to use to calculate bkgd to add
+  # fileData_ls: a list similar to plotdata in SummaryPlots.R summary.plots() that enables file saving. Contains three elements:
+  #   fileDir:  normalized csv files destination directory
+  #   fileBase:  base filename for normalized csv files
 
   # require package(s) with norm functions in them
   uPkg = unique(normPkg)
@@ -113,7 +119,9 @@ function(tag, raw.mat, expt.design=NULL,
     my.dt = data.table(LoM.norm[[mynorm]],keep.rownames=TRUE) ##feedback note this is not a data table..
     # data.table names the rowname column "rn"
     names(my.dt)[names(my.dt)=="rn"] = "Identifier"
-    write.csv(my.dt,file=paste(mynorm,tag,"csv",sep='.'),quote=F) 
+    #filename = sprintf('%s%i_%s_%s.png', plotdata$plotdir, plotID, plotdata$plotbase, plotDesc)
+    # fileData_ls = list(fileDir=".", fileBase="")
+    write.csv(my.dt,file=paste0(fileData_ls$fileDir,fileData_ls$fileBase,paste(mynorm,tag,"csv",sep='.')),quote=F) 
   }
 
   # return list of normalized matrices
