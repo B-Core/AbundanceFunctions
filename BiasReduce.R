@@ -8,6 +8,25 @@
 # Started - July 2016
 ################################################################################
 
+# Original background function using quantiles
+origBkgd <- function(x,probs=.75){
+  quantile(x, probs = probs, na.rm = T) /
+    10^(max(c(trunc(log10(quantile(x, probs = probs, na.rm = T))) -1, 1)))
+} # origBkgd
+
+# New background function using ?? paper.
+newBkgd <- function(x){
+  require(matrixStats)
+  require(bbmle)
+  raw.matrix.filtered = x[rowSums(is.na(x))<1, ]   # filtering out NAs
+  raw.matrix.filtered = raw.matrix.filtered[rowSums(raw.matrix.filtered==0)==0, ]  # filtering out zeros
+  SD.raw.filtered = rowSds(raw.matrix.filtered)
+  Mean.raw.filtered = rowMeans(raw.matrix.filtered)
+  llfit = function(c1,c2) { -sum(dnorm(log2(c1*Mean.raw.filtered + c2) - log2(SD.raw.filtered))) }
+  ans.mle2 = mle2(llfit,start=list(c1=0.5,c2=0.5))
+  return(ans.mle2@coef[[2]]/ans.mle2@coef[[1]])
+} # newBkgd
+
 normMatrix <-
 function(tag, raw.mat, expt.design=NULL, 
          normvec=c("loess","qspln","quant"), 
@@ -23,8 +42,9 @@ function(tag, raw.mat, expt.design=NULL,
                        quant=list(copy=c(TRUE,FALSE))), 
          normPkg=c("affy","affy","affy"), 
          depth.est = list(upper.quartile=0.75, max=1), 
-         bkgdFUN=function(x,probs=.75){quantile(x,probs=probs,na.rm=TRUE)/10^(max(c(trunc(log10(quantile(x,probs=probs,na.rm=TRUE)))-1,1)) )},
-          fileData_ls = list(fileDir="./", fileBase=""))
+         bkgdFUN=origBkgd, 
+         addBkgdToLogRaw_log = F,
+         fileData_ls = list(fileDir="./", fileBase=""))
          {
   # Add lograw to normvec ##Feedback ##TS ##MF
   # apply bias reduction functions to abundance data
@@ -48,7 +68,11 @@ function(tag, raw.mat, expt.design=NULL,
   #         qspline args are from function default and help page, respectively
   # normPkg: vector of string names of packages containing these functions
   # depth.est: named list of quantiles per sample to report to console
-  # bkgdFUN: string specifying function to use to calculate bkgd to add
+  # bkgdFUN: string specifying function to use to calculate bkgd to add. Current options:
+  #     origBkgd -  (DEFAULT) uses quantiles of raw.mat to determine appropriate background
+  #     newBkgd - uses X paper to determine appropriate background
+  # AddBkgdToLogRaw_log - logical indicating if "alograw" should add 1 (FALSE) or result of bkgdFUN (TRUE) to raw.mat values before logging.
+  #     NOTE: should always use default of 1, unless you're using alograw for something other than comparing it to BR results.
   # fileData_ls: a list similar to plotdata in SummaryPlots.R summary.plots() that enables file saving. Contains three elements:
   #   fileDir:  normalized csv files destination directory
   #   fileBase:  base filename for normalized csv files
@@ -80,7 +104,13 @@ function(tag, raw.mat, expt.design=NULL,
   # Create a log2 transform of the raw matrix. Do not add background!
   mynorm = "alograw"
   message(sprintf("mynorm = %s", mynorm))
-  LoM.norm[[mynorm]] = log2(raw.mat+1)
+  if (addBkgdToLogRaw_log){
+    message(sprintf("Adding background of %s to counts before logging.", bkgd))
+    LoM.norm[[mynorm]] = log2(raw.mat+bkgd)
+  } else {
+    message(sprintf("Add default of 1 to counts before logging."))
+    LoM.norm[[mynorm]] = log2(raw.mat+1)
+  } # fi
 
 ###  for( i in 1:length(normvec) ){
 
