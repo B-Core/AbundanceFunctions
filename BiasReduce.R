@@ -14,7 +14,8 @@ uniformBkgd <- function(x,probs=.75){
     10^(max(c(trunc(log10(quantile(x, probs = probs, na.rm = T))) -1, 1)))
 } # origBkgd
 
-# New background function using ?? paper.
+# New background function using Lin et al. 2008 paper.
+# Model-based variance-stabilizing transformation for Illumina microarray data
 fittedBkgd <- function(x){
   require(matrixStats)
   require(bbmle)
@@ -70,7 +71,7 @@ function(tag, raw.mat, expt.design=NULL,
   # depth.est: named list of quantiles per sample to report to console
   # bkgdFUN: string specifying function to use to calculate bkgd to add. Current options:
   #     uniformBkgd - uses quantiles of raw.mat to determine appropriate background
-  #     fittedBkgd - (DEFAULT) uses X paper to determine appropriate background
+  #     fittedBkgd - (DEFAULT) uses Lin et al. 2008 paper to determine appropriate background
   # AddBkgdToLogRaw_log - logical indicating if "alograw" should add 1 (FALSE) or result of bkgdFUN (TRUE) to raw.mat values before logging.
   #     NOTE: should always use default of 1, unless you're using alograw for something other than comparing it to BR results.
   # fileData_ls: a list similar to plotdata in SummaryPlots.R summary.plots() that enables file saving. Contains three elements:
