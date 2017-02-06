@@ -9,13 +9,13 @@
 ################################################################################
 
 # Original background function using quantiles
-origBkgd <- function(x,probs=.75){
+uniformBkgd <- function(x,probs=.75){
   quantile(x, probs = probs, na.rm = T) /
     10^(max(c(trunc(log10(quantile(x, probs = probs, na.rm = T))) -1, 1)))
 } # origBkgd
 
 # New background function using ?? paper.
-newBkgd <- function(x){
+fittedBkgd <- function(x){
   require(matrixStats)
   require(bbmle)
   raw.matrix.filtered = x[rowSums(is.na(x))<1, ]   # filtering out NAs
@@ -42,7 +42,7 @@ function(tag, raw.mat, expt.design=NULL,
                        quant=list(copy=c(TRUE,FALSE))), 
          normPkg=c("affy","affy","affy"), 
          depth.est = list(upper.quartile=0.75, max=1), 
-         bkgdFUN=origBkgd, 
+         bkgdFUN=fittedBkgd, 
          addBkgdToLogRaw_log = F,
          fileData_ls = list(fileDir="./", fileBase=""))
          {
@@ -69,8 +69,8 @@ function(tag, raw.mat, expt.design=NULL,
   # normPkg: vector of string names of packages containing these functions
   # depth.est: named list of quantiles per sample to report to console
   # bkgdFUN: string specifying function to use to calculate bkgd to add. Current options:
-  #     origBkgd -  (DEFAULT) uses quantiles of raw.mat to determine appropriate background
-  #     newBkgd - uses X paper to determine appropriate background
+  #     uniformBkgd - uses quantiles of raw.mat to determine appropriate background
+  #     fittedBkgd - (DEFAULT) uses X paper to determine appropriate background
   # AddBkgdToLogRaw_log - logical indicating if "alograw" should add 1 (FALSE) or result of bkgdFUN (TRUE) to raw.mat values before logging.
   #     NOTE: should always use default of 1, unless you're using alograw for something other than comparing it to BR results.
   # fileData_ls: a list similar to plotdata in SummaryPlots.R summary.plots() that enables file saving. Contains three elements:
