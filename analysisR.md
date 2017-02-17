@@ -1,4 +1,3 @@
-
 analysis.R.md
 =====================
 author: Janice
@@ -197,6 +196,7 @@ output normalized csv files in results/STAR directory
 - qspln.SJ.counts.csv
 - quant.gene.counts.csv
 - quant.SJ.counts.csv
+
 ```
 LoM.norms = vector(mode='list',length=length(STAR.data$LoM.raw))
 names(LoM.norms) = names(STAR.data$LoM.raw)
