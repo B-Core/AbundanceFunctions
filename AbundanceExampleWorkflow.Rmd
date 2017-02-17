@@ -1,0 +1,476 @@
+---
+title: "JM_RNA151015 Trial RNAseq Analysis"
+author: "Joey Estabrook"
+date: "February 2, 2017"
+output: html_document
+---
+
+analysis.R runs prebuilt functions on RNAseq alignments
+
+R session should be run in /proj/<projectname>/results/STAR/ directory or setwd("/proj/<projectname>/results/STAR/") while in a current R session.
+
+### Import libraries and CompBio Repos:
+- AbundanceFunctions
+- AssociationFunctions
+
+This should be a separate updated but static copy of the repo so you are running and testing your script on a static instance. That way drastic updates will not effect your current analysis.
+
+```{r}
+require(data.table)
+require(NMF)
+require(affy)
+require(limma)
+require(AnnotationDbi)
+source("/Path/To/Static/code/AbundanceFunctions/BiasReduce.R")  
+source("/Path/To/Static/code/AbundanceFunctions/ExtractTransformLoad.R")
+source("/Path/To/Static/code/AbundanceFunctions/ReadAndParse.R")
+source("/Path/To/Static/code/AssociationFunctions/gs.wrapper.R")  #New gs.wrapper with ags. function
+source("/Path/To/Static/code/BcorePlotting/SummaryPlots.R")
+source("/Path/To/Static/code/BcorePlotting/MultipleTestingCorrection.R")
+source("/Path/To/Static/code/BcorePlotting/ClusteringPlots.R")
+source("/Path/To/Static/code/AbundanceFunctions/DifferentialAnalysis.R")
+source("/Path/To/Static/code/AbundanceFunctions/NonVisualOutput.R")
+```
+
+### Constants
+Set some constants for later use. 
+
+```{r constants}
+# constants
+hclust.limit = 2^16 # max data rows for hclust
+hc.frac.cut = 0.75; # quantile of data distribution reqd in one group's worth of data, if too many rows for hclust() show minimal expression
+# regression parameter
+na.lim = 0 # max NAs per row tolerated by lm() at least in some cases
+# plotting colors
+colors.rgb = c(rgb(0,0,0),rgb(0.1,0.1,1),rgb(0,.7,.7),rgb(0,.7,0),rgb(.7,1,0),rgb(.7,0,.7)) 
+```
+
+###Project Annotation
+## Gene file annotation.
+Make sure you have the proper GTF used for alignment and the correct release.
+TaxID can be found www.ncbi.nlm.nih.gov/Taxonomy/TaxIdentifier/tax_identifier.cgi
+
+```{r}
+# custom project title
+proj.title = "JM_RNA151015JM"
+# custom annotation
+md.file = "/Path/to/static/code/expt.design.trialstudy.txt"
+# gene annotation
+taxID=10116
+gene2ENSfile="/Path/to/gtfs/gene2ensembl.gz"
+gene2ENS.col = c("taxID","EntrezID","Gene","RefSeqTranscript","EnsemblTranscript","RefSeqProtein","EnsemblProtein")
+gtfFile = "/Path/to/gtfs/Rattus_norvegicus.Rnor_6.0.gtf"
+gtf.feature = "gene"
+gtf.orig.col = c("gene_id","gene_name","gene_biotype")
+gtf.col = c("Gene","Symbol","biotype")
+```
+
+
+### Setup for reading in STAR output
+
+Project directory where star output was stored.
+Extract the names of the samples from the output names.
+Use `readpattern` to specifiy the star output to read in usually all the files, depends on groups.
+Use `label.from.colname` as *unique* identifiers of each sample.
+
+
+```{r}
+# set up to read in STAR alignments
+readdir = '/Path/to/JM_RNA151015JM/results'
+readpattern='^RNA1'
+useme.cols = 'RN'
+label.from.colname='^.*JM_(.+)_R1_001' #this is unique
+
+```
+
+This helps annotate your STAR.data object. These are the "conditions"/"labels"/"groups" for your sample names. Use 'annCol.label' as group identifier. These can be multiple conditions. I'm not sure how to 
+add more than one yet.
+
+```{r}
+annCol.names='group'
+annCol.lmBy='pressure'
+annCol.label ='^.*JM_(.+)_R1_001'
+samps = dir(path=readdir, pattern=readpattern)
+# trimmed sample labels
+samp.labels = gsub(label.from.colname,'\\1', samps)  
+```
+
+### Read in STAR output *finally*
+Creates STAR.data "list" and writes to current directory (results/STAR) the following csv files:
+- raw.gene.counts.FwdReads.csv
+- raw.gene.counts.Reads.csv
+- raw.gene.counts.RevReads.csv
+- raw.SJ.counts.UniqueReads.csv
+
+```{r}
+# read in STAR alignments
+STAR.data = read_STAR(useme.cols=useme.cols,label.from.colname=label.from.colname,annCol.label=annCol.label,annCol.names=annCol.names,annCol.normBy=NULL,annCol.lmBy=annCol.lmBy,readpattern=readpattern,unstranded.col = list(gene.counts = c(1:4),SJ.counts = c(1:3,7)))
+```
+
+* STAR.data structure=> list of list of list of list of matrices*
+
+  <blockquote> STAR.data[
+    expt.design,
+    myreads,
+    LoM.raw[
+      gene.counts[
+        Reads(matrix),
+        FwdReads(matrix),
+        RevReads(matrix)
+      ],
+      SJ.counts[
+      UniqueReads(matrix)
+      ]
+    ]
+  ]</blockquote>
+
+Object that holds the labels/groups/conditions of your project. Might need parsing from <proj>/data/expt.design.txt. This was done manually for now.
+
+```{r}
+annCol=STAR.data[["expt.design"]]
+```
+
+###Check strandedness of dataset
+
+```{r}
+i = grep('gene', names(STAR.data$LoM.raw),ignore.case=T)[1]
+fwdmk = grepl('fwd|forward|sense', names(STAR.data$LoM.raw[[i]]), ignore.case=T)
+revmk = grepl('rev|anti', names(STAR.data$LoM.raw[[i]]), ignore.case=T)
+f = which(fwdmk)[1]; r = which(revmk)[1]; u = which(!fwdmk & !revmk)[1]
+if( any(is.na( c(f,r,u) )) ){
+  stop('Gene-based data must provide forward, reverse and unstranded types')
+}
+testv = log2(colSums(STAR.data$LoM.raw[[i]][[u]],na.rm=T)+1) - log2(colSums(STAR.data$LoM.raw[[i]][[f]],na.rm=T)+colSums(STAR.data$LoM.raw[[i]][[r]],na.rm=T)+1)
+if( sum(round(testv,0))>1 ){
+  stop("Forward and reverse reads don't add up to total reads!")
+} else {
+  testv =  log2(colSums(STAR.data$LoM.raw[[i]][[f]],na.rm=T)) - log2(colSums(STAR.data$LoM.raw[[i]][[r]],na.rm=T)+1)
+  if( sum(round(testv,0))>1){            # fwd strand excess over rev
+    myreads = names(STAR.data$LoM.raw[[i]])[f]
+    cat(" Using", myreads, "counts","\n")
+  } else if( sum(round(testv,0))<=-1){   # rev strand excess over fwd
+    myreads = names(STAR.data$LoM.raw[[i]])[r]
+    cat(" Using", myreads, "counts","\n")
+  } else {
+    myreads = names(STAR.data$LoM.raw[[i]])[u] # no strand inequality
+    cat(" Using", myreads, "counts","\n")
+  }
+}
+```
+
+
+###Parse GTF used for parsing
+
+```{r}
+gtf = readENSgtf(filename=gtfFile)
+genes.gtf = gtf[feature==gtf.feature, mget(gtf.orig.col)]
+names(genes.gtf) = gtf.col
+setkeyv(genes.gtf,gtf.col[1])
+##### parse of NCBI's EntrezID to Ensembl translation
+Entrez2Ensembl = fread(paste("zgrep",paste0("-E '^",taxID,"'"),gene2ENSfile))
+names(Entrez2Ensembl) = gene2ENS.col
+setkeyv(Entrez2Ensembl,gene2ENS.col[3])
+##### add EntrezIDs to genes.gtf
+tmp = Entrez2Ensembl[,mget(gene2ENS.col[2:3])]; tmp=tmp[!duplicated(tmp),]
+genes.gtf = merge(genes.gtf,tmp,all.x=TRUE)
+rm(tmp)
+```
+
+### Bias Reduction
+uses AbundanceFunctions/processData.R
+output normalized csv files in results/STAR directory
+- lowess.gene.counts.csv
+- lowess.SJ.counts.csv
+- qspln.gene.counts.csv
+- qspln.SJ.counts.csv
+- quant.gene.counts.csv
+- quant.SJ.counts.csv
+
+```{r}
+LoM.norms = vector(mode='list',length=length(STAR.data$LoM.raw))
+names(LoM.norms) = names(STAR.data$LoM.raw)
+for(tag in names(STAR.data$LoM.raw) ){
+  if( length(STAR.data$LoM.raw[[tag]])>1 ){
+    LoM.norms[[tag]] = normMatrix(tag=tag,raw.mat=STAR.data$LoM.raw[[tag]][[myreads]],expt.design=STAR.data$expt.design)
+  } else {
+    LoM.norms[[tag]] = normMatrix(tag=tag,raw.mat=STAR.data$LoM.raw[[tag]][[1]],expt.design=STAR.data$expt.design)
+  }
+}
+```
+
+
+###Check annotation file and colnames(STAR.data) match, subset samples that do match expt.design.txt 
+
+
+```{r}
+## custom: reannotate from metadata
+md.dt = fread(md.file)
+# map annotation to read matrix
+idx2 = match( colnames(STAR.data$LoM.raw[[1]][[myreads]]), names(md.dt) )
+idx1 = which(!is.na(idx2)); idx2 = idx2[idx1]
+if( sum(idx1==1:ncol(STAR.data$LoM.raw[[1]][[myreads]]))==ncol(STAR.data$LoM.raw[[1]][[myreads]]) ){
+  annCol = STAR.data$expt.design
+  namecol = setdiff( 1:ncol(md.dt), idx2 )
+  md.factors = as.character(md.dt[,namecol,with=F])
+  for(k in 1:nrow(md.dt) ){
+    annCol[[ md.dt[k,get(names(md.dt)[namecol])] ]][idx1] = 
+      as.character( md.dt[ k, mget(names(md.dt)[idx2]) ] )
+  }
+} else {
+  stop(paste("Some samples have no annotation in",md.file))
+}
+```
+
+
+###Produce QC plots
+#summary.plots 
+#currently wraps a boxplot (1), scatterplot (2), density plot (3), sd vs. intensity plot (4), and MA plot (5). The MA plot #behavior plots all sample columns in a matrix vs. one BaseSample (Defaults to False).
+
+#qc.clusters
+# Plots for each design factor (default) or for factors specified in facSel
+#   1) Histogram of p values that were included in the design
+#   2) qvalue's default plots, with full qvalue range c(0,1) plotted
+#      Look for even descent to pi0 in the top left tuning plot
+#      The slow/steep rise in q-values in remaining plots depends on resolving power of data
+#   3) Optional MDS plot (bonusMDS=TRUE) at q-value cut (default 0.1, see below)
+
+```{r}
+mytypes = names(LoM.norms)
+mynorms = names(LoM.norms[[1]])
+samp.labels = gsub('^[^.]+\\.','',colnames(LoM.norms[[1]][[1]]))
+grpBy = annCol [[annCol.lmBy]]
+clim.pct=0.96
+histbins=20
+for(i in 1:length(mytypes) ){
+  for(j in 1:length(mynorms)){
+    # set up matrices and config for plotting
+    if( length(STAR.data$LoM.raw[[ mytypes[i] ]])>1 ){
+      rawmat = STAR.data$LoM.raw[[ mytypes[i] ]][[myreads]]
+    } else {
+      rawmat = STAR.data$LoM.raw[[ mytypes[i] ]][[1]]
+    }
+    normmat= LoM.norms[[ mytypes[i] ]][[ mynorms[j] ]]
+    colnames(rawmat)=samp.labels; colnames(normmat)=samp.labels
+    plotdata = list(plotdir='.',plotbase=paste(mynorms[j],mytypes[i],sep='.'),plottitle=proj.title)
+    rowmask = rowSums(rawmat>1,na.rm=T) > (ncol(rawmat)/length(unique(grpBy)) ) & rowSums(is.na(normmat)) < (ncol(normmat)/length(unique(grpBy)) )
+    if(sum(rowmask)>hclust.limit){ #hack! build optimization!
+      rowmask = rowSums(rawmat>=quantile(rawmat,probs=hc.frac.cut,na.rm=T),na.rm=T) > (ncol(rawmat)/length(unique(grpBy)) ) & rowSums(is.na(normmat)) < (ncol(normmat)/length(unique(grpBy)) )
+    }
+    ans = summary.plots(rawmat=log2(rawmat +1), normmat=normmat, mynorm=mynorms[j], samp.labels=samp.labels, samp.classes=grpBy, plotdata=plotdata,plot2file=TRUE,histbins=histbins, colorspec=colors.rgb)
+    ans = qc.clusters(rawmat=log2(rawmat[rowmask,] +1), normmat=normmat[rowmask,], attribs=annCol, oneclass=annCol.lmBy, colorspec=colors.rgb, plotdata=plotdata, plot2file=TRUE, clim.pct=clim.pct)
+  }
+}
+```
+
+### Run regression based on Group
+```{r}
+regress_lsls = vector(mode='list',length=length(STAR.data$LoM.raw))
+names(regress_lsls) = names(STAR.data$LoM.raw)
+contr_ls = list(pressure=list(baseline="Naive",contr.FUN="contr.treatment"))
+#set baseline for regression in group of intereset i.e. pressure, baseline = "Naive"
+
+lm_expr = "y ~ pressure"
+rowmask_ls = vector(mode='list',length=length(STAR.data$LoM.raw))
+names(rowmask_ls) = names(STAR.data$LoM.raw)
+for(i in 1:length(mytypes) ){
+  for(j in 1:length(mynorms)){
+    # set up data matrices
+    if( length(STAR.data$LoM.raw[[ mytypes[i] ]])>1 ){
+      rawmat = STAR.data$LoM.raw[[ mytypes[i] ]][[myreads]]
+    } else {
+      rawmat = STAR.data$LoM.raw[[ mytypes[i] ]][[1]]
+    }
+    tmp = unlist(lapply(contr_ls,function(x){x$baseline}))
+    tmp=paste(names(tmp),tmp,sep=".")
+    plotdata = list(plotdir='./',plotbase=paste(mynorms[j],mytypes[i],tmp,sep='.'),plottitle=proj.title)
+    normmat= LoM.norms[[ mytypes[i] ]][[ mynorms[j] ]]
+    colnames(rawmat)=samp.labels; colnames(normmat)=samp.labels
+    # prepare rowmask for heatmap/MDS (remove non-expr or low expr>hclustlim)
+    rowmask = rowSums(rawmat>1,na.rm=T) > (ncol(rawmat)/length(unique(grpBy)) ) & rowSums(is.na(normmat)) <= na.lim
+    rowmask_ls[[ mytypes[i] ]][[ mynorms[j] ]] = rowmask # save for later
+    # regression
+    regress_lsls[[mytypes[i]]][[mynorms[j]]] = regressMatrix(normmat[rowmask,], expt.design=annCol, lm_expression=lm_expr, contr_list = contr_ls, plot2file = TRUE, plotdata = plotdata)
+  }
+}
+```
+
+### preview results
+```{r}
+topn=1500
+for( i in 1:length(mytypes) ){
+  for( j in 1:length(mynorms) ){
+    ans = regress_lsls[[mytypes[i]]][[mynorms[j]]]$q_list
+    cat("1-pi0",mytypes[i],mynorms[j],signif(unlist(lapply(2:length(ans),function(x){1-ans[[x]]$pi0})),2),"\n")
+    cat("top",mytypes[i],mynorms[j],signif(unlist(lapply(2:length(ans),function(x){quantile(ans[[x]]$qvalues,probs=topn/length(ans[[x]]$qvalues))})),3),topn,"out of",length(ans[[2]]$qvalues),"\n")
+}}
+```
+
+
+# Plots for each design factor (default) or for factors specified in facSel
+#   1) Histogram of p values that were included in the design
+#   2) qvalue's default plots, with full qvalue range c(0,1) plotted
+#      Look for even descent to pi0 in the top left tuning plot
+#      The slow/steep rise in q-values in remaining plots depends on resolving power of data
+
+```{r}
+ngene_v = c(500,1500,3000)
+lmBy = attr(annCol,"lmBy")
+histbins=20
+screen_lsmk = vector(mode='list',length=length(STAR.data$LoM.raw))
+names(screen_lsmk) = names(STAR.data$LoM.raw)
+for( i in 1:length(mytypes) ){
+  for( j in 1:length(mynorms) ){
+    normmat= LoM.norms[[ mytypes[i] ]][[ mynorms[j] ]]
+    colnames(normmat)=samp.labels
+    reg_ls = regress_lsls[[mytypes[i]]][[mynorms[j]]]
+    mymk= rowmask_ls[[mytypes[i]]][[mynorms[j]]]
+    # pull out regression design and set up plot config
+    tmp = unlist(lapply(contr_ls,function(x){x$baseline}))
+    tmp=paste(names(tmp),tmp,sep=".")
+    plotdata = list(plotdir='./',plotbase=paste(mynorms[j],mytypes[i],tmp,sep='.'),plottitle=proj.title)
+    for( ngenes in ngene_v ){ # number of top genes by q- or p-value to plot
+      for(fac in names(reg_ls$q_list)[grep(lmBy,names(reg_ls$q_list))] ){
+        pdata = plotdata
+        pdata$plotbase = paste(plotdata$plotbase,make.names(fac),ngenes,sep='.')
+        ans = qcQvalues(norm_x=normmat[mymk,], pvalue_v=reg_ls$p_mat[,fac], obj_qvalue=reg_ls$q_list[[fac]], qcut=ngenes, attribs=annCol, oneclass=lmBy, plotdata=pdata, colorspec=colors.rgb, histbins=histbins, plot2file=TRUE)
+        screen_lsmk[[mytypes[i]]][[mynorms[j]]][paste(fac,ngenes,sep=":")] = ans['rowmask']
+      }
+    }
+  }
+}
+```
+
+
+
+```{r}
+ratioby_ls = list(pressure=contr_ls$pressure$baseline)
+ratio_fold = 1.3
+intensity_fold = 2
+cut_ls = list(q_combine="OR", rcut_fold=ratio_fold, icut_fold=intensity_fold)
+# save ratios and selections
+select_lsmk = vector(mode='list',length=length(STAR.data$LoM.raw))
+names(select_lsmk) = names(STAR.data$LoM.raw)
+ratio_lsmat = vector(mode='list',length=length(STAR.data$LoM.raw))
+names(ratio_lsmat) = names(STAR.data$LoM.raw)
+for( i in 1:length(mytypes) ){
+  for( j in 1:length(mynorms) ){
+    normmat= LoM.norms[[ mytypes[i] ]][[ mynorms[j] ]]
+    colnames(normmat)=samp.labels
+    mymask= rowmask_ls[[mytypes[i]]][[mynorms[j]]]
+    reg_ls = regress_lsls[[mytypes[i]]][[mynorms[j]]]$q_list
+    reg_ls = reg_ls[!grepl('Intercept',names(reg_ls))]
+    plotdata = list(plotdir='./',plotbase=paste(mynorms[j],sub('counts','ratios',mytypes[i]),'minratio',paste0(ratio_fold,'x'),'minexpr',round(min(normmat,na.rm=T)+log2(intensity_fold),1),sep='.'),plottitle=proj.title)
+    for( ngenes in ngene_v ) {
+      # calculate and plot ratios
+      cut_ls$qcut = ngenes
+      pdata = plotdata
+      pdata$plotbase = paste(plotdata$plotbase,'ratio.vs',ratioby_ls$strain,ngenes,sep='.')
+      ans = designRatios(normmat[mymask,], attribs=annCol, ratioby_ls=ratioby_ls, cut_ls=cut_ls)
+      # save selections
+      select_lsmk[[mytypes[i]]][[mynorms[j]]][paste(fac,ngenes,sep=":")] = ans['rowmask']
+    }
+    # save ratiomat (not dependent on ngene cut) after ngene loop
+    ratio_lsmat[[mytypes[i]]][[mynorms[j]]] = ans$ratiomat
+  }
+}
+```
+
+###Produce Scatter plots based on lmBy
+```{r}
+for( i in 1:length(mytypes) ){
+  for( j in 1:length(mynorms) ){
+    scatter_mat= LoM.norms[[ mytypes[i] ]][[ mynorms[j] ]]
+    colnames(normmat)=samp.labels
+    plotdata = list(plotdir='./',plotbase=paste(mynorms[j],mytypes[i],'Scatter',lmBy,sep=':'),plottitle=proj.title)
+    scatterplot(scatter_mat, attribs=annCol[[lmBy]],plotdata=plotdata,plot2file = TRUE) 
+  }
+}
+```
+
+
+###Plot Ratios DE heatmaps and MDS plots 
+```{r}
+for( j in 1:length(mynorms) ){
+  ratiomat = ratio_lsmat[[mytypes[1]]][[mynorms[j]]]
+  plotdata = list(plotdir='./',plotbase=paste(mynorms[j],mytypes[1],'Heat&MDS',lmBy,sep=':'),plottitle=proj.title)
+  plotRatios(ratiomat=ratiomat,attribs=annCol,'pressure',plotdata=plotdata, colorspec = colors.rgb, plot2file = TRUE)
+}
+```
+
+
+#start with gene counts, loess norm
+#translate to human for annotation purposes
+```{r}
+i=1; j=which(mynorms=="loess")
+ratio_mat = ratio_lsmat[[mytypes[i]]][[mynorms[j]]]
+reg_ls = regress_lsls[[mytypes[i]]][[mynorms[j]]]
+ID = rownames(ratio_mat)
+```
+
+
+###Human numeric EntrezGene IDs
+#Change the srcSpecies to the appropriate species
+```{r}
+hsa_entrezID = inpIDMapper(ID, srcSpecies="RATNO", destSpecies="HOMSA", srcIDType="ENSEMBL", destIDType="EG", keepMultDestIDMatches = FALSE)
+Entrez.ID = character(length(ID))
+Entrez.ID[] = NA
+idx2 = match(ID,names(hsa_entrezID))
+idx1 = which(!is.na(idx2)); idx2= idx2[idx1]
+Entrez.ID[idx1] = hsa_entrezID[idx2];
+Entrez.ID = as.numeric(Entrez.ID)
+```
+
+
+###Human gene symbols
+```{r}
+hsa_symbol = inpIDMapper(ID, srcSpecies="RATNO", destSpecies="HOMSA", srcIDType="ENSEMBL", destIDType="SYMBOL", keepMultDestIDMatches = FALSE)
+Anno.Symbol = character(length(ID))
+Anno.Symbol[] = NA
+idx2 = match(ID,names(hsa_symbol))
+idx1 = which(!is.na(idx2)); idx2= idx2[idx1]
+Anno.Symbol[idx1] = unlist(hsa_symbol[idx2]);
+# assemble IDs for annotation
+backgroundset = as.data.table(cbind(ID, Entrez.ID, Anno.Symbol))
+# assemble signatures
+```
+
+
+```{r}
+ngenes = 3000
+fac = names(reg_ls$q_list)[grep(lmBy,names(reg_ls$q_list))]
+rowmask = select_lsmk[[mytypes[i]]][[mynorms[j]]][[paste(fac,ngenes,sep=":")]]
+sig_gmt = NULL
+betas = reg_ls$b_mat[,fac]
+sig_gmt[['all']] =  ID[rowmask]
+sig_gmt[['up']] = ID[rowmask & betas>0]
+sig_gmt[['dn']] = ID[rowmask & betas<=0]
+```
+
+
+###Annotate gene sets with default anno sets
+```{r}
+fileSettings = list(directory='/PATH/TO/PROJECT/DIRECTORY/',baseFilename="Pathway_top3K_Trial_Pressure")
+path_ls = ags.wrapper(setlist=sig_gmt, backgroundset, include.identifiers=TRUE, anno.uni=TRUE, 
+                      fileSettings = fileSettings,
+                      functiondir = "/PATH/TO/AssociationFunctions/",
+                      resourcedir = "PATH/TO/AssocationData",
+                      return.OM=TRUE, ecut=0.05, ocut=5)
+
+fileSettings = list(directory='/PATH/TO/PROJECT/DIRECTORY/',baseFilename="Pathway_top3K_Trial_Pressure_noUNI")
+
+```
+
+
+###Annotate gene sets with default anno sets BUT restrict uni to overlap
+```{r}
+pathi_ls = ags.wrapper(setlist=sig_gmt, backgroundset, include.identifiers=TRUE, anno.uni=FALSE,    # <
+                       fileSettings = fileSettings,
+                       functiondir = "/PATH/TO/AssociationFunctions/",
+                       resourcedir = "PATH/TO/AssocationData",
+                       return.OM=TRUE, ecut=0.05, ocut=5)
+
+
+out_norm_mat = LoM.norms$gene.counts$loess[rowmask_ls$gene.counts$loess,]
+out_table = outputTable(normmat= out_norm_mat, gtf.file = gtfFile,ratiomat = ratio_lsmat$gene.counts$loess, q_list=reg_ls$q_list)
+write.csv(out_table, row.names = FALSE, file='LoessNormed_with_Ratio_trialdata.txt',quote=FALSE)
+```
