@@ -243,7 +243,7 @@ function (SJmat, gtf.file,
   gtf.col = c("Gene","Symbol","Chr","start","stop"), 
   ikey = 1, isym = 2, ic = 3, i0 = 4, i1 = 5, #chr, start, stop
   pos.col = "Pos", pos.delim ="\\.", delim.sub="_",
-  source.me="~burchard/git.R/AbundanceFunctions/readENSgtf.R"
+  gtf.Rfile="ReadAndParse.R", gtf.Rdir="GenomicFunctions"
   ) {
   # genomic annotation of splice junction files
   # returns data.table with SJmat values and annotation for genomic features
@@ -259,13 +259,15 @@ function (SJmat, gtf.file,
   # pos.col : column for SJ identifiers comprising chr, start, stop
   # pos.delim : delimiter for splitting SJ identifiers into chr, start, stop
   # delim.sub : replacement for delimiter if found chr field
-  # source.me : R file with readENSgtf function
+  # gtf.Rfile : R file with readENSgtf function
+  # gtf.Rdir : /Path/To/Directory containing R file with readENSgtf function
+  #            trailing slash is currently NOT enabled
 
 
   # imports
   require(data.table)
   require(IRanges)
-  source(source.me) # very trusting!
+  source(paste(gtf.Rdir,gtf.Rfile,sep="/")) # very trusting!
   
   
   # read in genome annotation
@@ -345,7 +347,7 @@ function (SJmat, gtf.file,
   setkeyv(SJs_dt,pos.col)
 
   # combine ID translations with data
-  SJmat_dt = data.table(SJ_mat, keep.rownames=T)
+  SJmat_dt = data.table(SJmat, keep.rownames=T)
   names(SJmat_dt)[names(SJmat_dt)=="rn"] = pos.col
   setkeyv(SJmat_dt, pos.col)
   SJs_dt = merge(SJs_dt, SJmat_dt)

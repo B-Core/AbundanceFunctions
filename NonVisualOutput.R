@@ -17,7 +17,7 @@ function(normmat, gtf.file, rowmask=NULL, ratiomat=NULL,
   gtf.col = c("Gene","Symbol","Chr","start","stop"), 
   ikey = 1, isym = 2, ic = 3, i0 = 4, i1 = 5, #chr, start, stop
   pos.col = "Pos", pos.delim ="\\.", delim.sub="_",
-  source.me="~burchard/git.R/AbundanceFunctions/readENSgtf.R"
+  gtf.Rfile="ReadAndParse.R", gtf.Rdir="GenomicFunctions"
   ){
   # return a data.table for reporting, with abundance data and identifiers
   #     and optionally also with ratio data and regression results:
@@ -40,10 +40,14 @@ function(normmat, gtf.file, rowmask=NULL, ratiomat=NULL,
   # pos.col : column for SJ identifiers comprising chr, start, stop
   # pos.delim : delimiter for splitting SJ identifiers into chr, start, stop
   # delim.sub : replacement for delimiter if found chr field
+  # gtf.Rfile : R file with readENSgtf function
+  # gtf.Rdir : /Path/To/Directory containing R file with readENSgtf function
+  #            trailing slash is currently NOT enabled
+
    
   # imports
   require(data.table)
-  source(source.me) # very trusting!
+  source(paste(gtf.Rdir,gtf.Rfile,sep="/")) # very trusting!
 
   # check required arguments
   if( is.null(dim(normmat)) ){

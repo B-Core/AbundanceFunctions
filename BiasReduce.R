@@ -30,13 +30,13 @@ fittedBkgd <- function(x){
 
 normMatrix <-
 function(tag, raw.mat, expt.design=NULL, 
-         normvec=c("loess","qspln","quant"), 
+         normvec=c("loess","lowess","qspln","quant"), 
          normFUN=c(loess = "normalizeLoess",
                    lowess = "normalizeLoess",
                    qspln = "normalize.qspline",
                    quant = "preprocessCore:::normalize.quantiles"), 
 ###         normFUN=c("normalizeLoess","normalize.qspline","preprocessCore:::normalize.quantiles"), 
-         normarg=list( loess=list(method="loess"),
+         normarg=list( loess=list(method="loess", family.loess = "gaussian"),
                        lowess = list(method="lowess"),
                        qspln=list(samples=c( val1 = "default", val2 = "default"),na.rm=TRUE),
 ###                    qspln=list(samples=c( max(round(nrow(raw.mat)/1000), 100),12*nrow(raw.mat)^(-.7)),na.rm=TRUE),
