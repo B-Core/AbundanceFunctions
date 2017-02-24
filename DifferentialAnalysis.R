@@ -200,7 +200,7 @@ function(normmat, expt.design, lm_expression,
     stop("Regression formula was not supplied as a string") 
   }
   # check supplied factors for presence in formula
-  lm_fac = regmatches(lm_expression,gregexpr('([A-Za-z0-9_.]+)',lm_expression))[[1]]
+  lm_fac = regmatches(lm_expression,gregexpr('(?<=[`])([^`]+)(?=[`])|([A-Za-z0-9_.]+)',lm_expression,perl=T))[[1]]
   lm_fac = setdiff(lm_fac, response_var)
   n = length(lm_fac) - sum(lm_fac %in% names(expt.design)) 
   if( n != 0 ){
@@ -239,12 +239,14 @@ function(normmat, expt.design, lm_expression,
   p_mat[is.na(p_mat)] = 1
 
   # convert p-values to q-values for evaluation of factor impact on abundances
-  q_list = NULL
+  q_list = list()
   for( fac in colnames(p_mat) ){
     myflag = TRUE
     obj_qvalue = tryCatch( qvalue(p_mat[,fac]), 
           error=function(e){myflag=FALSE; cat("No qvalues for",fac,"\n")} )
-    if( myflag) { q_list[[fac]] = I(obj_qvalue) }
+    if( myflag) { 
+      q_list[[fac]] = I(obj_qvalue)
+    }
   }
 
   # Create optional regression plots
@@ -277,9 +279,11 @@ function(normmat, expt.design, lm_expression,
 }
 designRatios <-
 function (normmat, attribs, ratioby_ls,
-                         q_list=NULL, cut_ls=NULL) {
+                         q_list=NULL, cut_ls=NULL, verbose=FALSE) {
 # This is intended to calculate differential expression after feature selection
 # It will create ratios based on experimental design
+# It will also calculate selection masks for each set of cuts
+# verbose: comment on progress while building selection mask
 # normmat: matrix of experimental data in columns (with headers!)
 # attribs: list of sample classifications to be tracked in clustering
 #   each list element contains a string vector with one label per sample
@@ -304,8 +308,8 @@ function (normmat, attribs, ratioby_ls,
 #   q_dir: logical of length(q_list)
 #     TRUE: select features with q < qcut for i'th qvalue object
 #     FALSE: select features with q > qcut
-#   rcut_fold = linear scale number for min best abs ratio required
-#   icut_fold = linear scale number for mean fold above min(normmat) required #Feedback the difference between these two is not clear to me
+#   rcut_fold = linear scale ratio for min best abs ratio required
+#   icut_fold = linear scale intensity for mean fold above min(normmat) required
 #   => include elements to execute cuts; omit to skip
   # arguments
 
@@ -426,8 +430,12 @@ function (normmat, attribs, ratioby_ls,
             # include significant q-values
             if( any(grepl("OR",cut_ls$q_combine,ignore.case=TRUE)) ){
               rowmask = rowmask | q_list[[i]]$qvalues < qcut
+              if(verbose){
+                cat("Using OR for q-value cuts, selected =",sum(rowmask),"\n")}
             } else {
               rowmask = rowmask & q_list[[i]]$qvalues < qcut
+              if(verbose){
+                cat("Using AND for q-value cuts, selected=",sum(rowmask),"\n")}
             }
           } else {
             warning("Not including based on qvalues in ",names(q_list)[i]," with no main qcut")
@@ -437,8 +445,10 @@ function (normmat, attribs, ratioby_ls,
           #  nuisance significance, not to include all non-significant nuisances
           if( exists("qcutF") ){
             rowmask = rowmask & q_list[[i]]$qvalues > qcutF
+            if(verbose){cat("Avoiding q-values < qcutF, selected =",sum(rowmask),"\n")}
           } else if( exists("qcut") ){
             rowmask = rowmask & q_list[[i]]$qvalues > qcut
+            if(verbose){cat("Avoiding q-values < qcut, selected =",sum(rowmask),"\n")}
           } else {
             warning("Not avoiding based on qvalues in ",names(q_list)[i]," with no main qcut")
           }
@@ -455,10 +465,12 @@ function (normmat, attribs, ratioby_ls,
   # exclude ratios
   if( exists("rcut_fold", where=cut_ls) ){
     rowmask = rowmask & apply(X=abs(ratiomat), MARGIN=1, FUN=max, na.rm=T) > log2(cut_ls$rcut_fold)
+    if(verbose){cat("Requiring min abs ratio\n")}
   }
   # exclude abundances
   if( exists("icut_fold", where=cut_ls) ){
     rowmask = rowmask & apply(X=normmat, MARGIN=1, FUN=mean, na.rm=T) > ( log2(cut_ls$icut_fold) + min(normmat,na.rm=T) )
+    if(verbose){cat("Requiring min expression\n")}
   }
 
   # report selection size

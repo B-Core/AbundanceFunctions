@@ -1,7 +1,7 @@
 ---
-title: "JM_RNA151015 Trial RNAseq Analysis"
-author: "Joey Estabrook"
-date: "February 2, 2017"
+title: "RNA161024PS RNAseq Analysis"
+author: "Joey Estabrook & Julja Burchard"
+date: "February 17, 2017"
 output: html_document
 ---
 
@@ -12,6 +12,8 @@ R session should be run in /proj/<projectname>/results/STAR/ directory or setwd(
 ### Import libraries and CompBio Repos:
 - AbundanceFunctions
 - AssociationFunctions
+- BcorePlotting
+- GenomicsFunctions
 
 This should be a separate updated but static copy of the repo so you are running and testing your script on a static instance. That way drastic updates will not effect your current analysis.
 
@@ -21,15 +23,16 @@ require(NMF)
 require(affy)
 require(limma)
 require(AnnotationDbi)
-source("/Path/To/Static/code/AbundanceFunctions/BiasReduce.R")  
-source("/Path/To/Static/code/AbundanceFunctions/ExtractTransformLoad.R")
-source("/Path/To/Static/code/AbundanceFunctions/ReadAndParse.R")
-source("/Path/To/Static/code/AssociationFunctions/gs.wrapper.R")  #New gs.wrapper with ags. function
-source("/Path/To/Static/code/BcorePlotting/SummaryPlots.R")
-source("/Path/To/Static/code/BcorePlotting/MultipleTestingCorrection.R")
-source("/Path/To/Static/code/BcorePlotting/ClusteringPlots.R")
-source("/Path/To/Static/code/AbundanceFunctions/DifferentialAnalysis.R")
-source("/Path/To/Static/code/AbundanceFunctions/NonVisualOutput.R")
+source("../../code/AbundanceFunctions/BiasReduce.R")  
+source("../../code/AbundanceFunctions/ExtractTransformLoad.R")
+source("../../code/GenomicsFunctions/ReadAndParse.R")
+source("../../code/AssociationFunctions/gs.wrapper.R")  #New gs.wrapper with ags. function
+source("../../code/BcorePlotting/SummaryPlots.R")
+source("../../code/BcorePlotting/MultipleTestingCorrection.R")
+source("../../code/BcorePlotting/ClusteringPlots.R")
+source("../../code/AbundanceFunctions/DifferentialAnalysis.R")
+source("../../code/AbundanceFunctions/NonVisualOutput.R")
+source("../../code/GenomicsFunctions/ReadAndParse.R")
 ```
 
 ### Constants
@@ -39,27 +42,39 @@ Set some constants for later use.
 # constants
 hclust.limit = 2^16 # max data rows for hclust
 hc.frac.cut = 0.75; # quantile of data distribution reqd in one group's worth of data, if too many rows for hclust() show minimal expression
-# regression parameter
+SJ.counts.na.frac = 0.25;     # max fraction of samples not having detected a splice junction for the splice junction to be retained in raw data
+# regression parameters
 na.lim = 0 # max NAs per row tolerated by lm() at least in some cases
+do.not.regress = "alograw" # control norm not to be used for regression stats
 # plotting colors
 colors.rgb = c(rgb(0,0,0),rgb(0.1,0.1,1),rgb(0,.7,.7),rgb(0,.7,0),rgb(.7,1,0),rgb(.7,0,.7)) 
 ```
 
 ###Project Annotation
+Metadata if provided are found in `md.file`
+A basic metadata parser is provided below. Sample IDs are expected either as column headers in a by-column sample orientation, or in a designated column `md.IDcol` in a by-row sample orientation.
 ## Gene file annotation.
 Make sure you have the proper GTF used for alignment and the correct release.
 TaxID can be found www.ncbi.nlm.nih.gov/Taxonomy/TaxIdentifier/tax_identifier.cgi
+## Optional prior data
+If lists of genes of interest with or without additional data or annotation are available, please read them in below.
 
 ```{r}
-# custom project title
-proj.title = "JM_RNA151015JM"
-# custom annotation
-md.file = "/Path/to/static/code/expt.design.trialstudy.txt"
+# optional sample associated information (metadata) 
+md.file = "/home/exacloud/lustre1/BioCoders/ProjectCollaborations/PSchedin_RNA161024PS/data/sample.assoc.info/RNA_analysis_for_ERpositive.negative_cases_2016.10.txt"
+md.orientation = "byRow" # sampleIDs are in @ row. alt:byCol (IDs in @ col)
+md.IDcol = "SampleID" # reqd if md.orientation is byRow; byCol==headers are IDs
+
+# optional gene lists
+priordata.dir = "/home/exacloud/lustre1/BioCoders/ProjectCollaborations/PSchedin_RNA161024PS/data/genelists/" # directory with prior data files
+priordata.pattern = "*.txt"   # pattern to recognize files in dir()
+priordata.geneID = "ENSG"     # column name for gene IDs matching STAR's
+
 # gene annotation
-taxID=10116
-gene2ENSfile="/Path/to/gtfs/gene2ensembl.gz"
+taxID=9606
+gene2ENSfile="/home/exacloud/lustre1/BioCoders/DataResources/AnnotationSources/ncbi/gene2ensembl.gz"
 gene2ENS.col = c("taxID","EntrezID","Gene","RefSeqTranscript","EnsemblTranscript","RefSeqProtein","EnsemblProtein")
-gtfFile = "/Path/to/gtfs/Rattus_norvegicus.Rnor_6.0.gtf"
+gtfFile = "/home/exacloud/lustre1/BioCoders/DataResources/Genomes/hg38/release-87/gtf/Homo_sapiens.GRCh38.87.gtf"
 gtf.feature = "gene"
 gtf.orig.col = c("gene_id","gene_name","gene_biotype")
 gtf.col = c("Gene","Symbol","biotype")
@@ -68,31 +83,32 @@ gtf.col = c("Gene","Symbol","biotype")
 
 ### Setup for reading in STAR output
 
-Project directory where star output was stored.
+Project directory where star output was stored is specified by `readdir`.
 Extract the names of the samples from the output names.
 Use `readpattern` to specifiy the star output to read in usually all the files, depends on groups.
-Use `label.from.colname` as *unique* identifiers of each sample.
+Use `label.from.colname` to extract *unique* identifiers of each sample from dirnames.
 
 
 ```{r}
 # set up to read in STAR alignments
-readdir = '/Path/to/JM_RNA151015JM/results'
+readdir = "/home/exacloud/lustre1/BioCoders/ProjectCollaborations/PSchedin_RNA161024PS/results/STAR_gene/"
 readpattern='^RNA1'
-useme.cols = 'RN'
-label.from.colname='^.*JM_(.+)_R1_001' #this is unique
-
-```
-
-This helps annotate your STAR.data object. These are the "conditions"/"labels"/"groups" for your sample names. Use 'annCol.label' as group identifier. These can be multiple conditions. I'm not sure how to 
-add more than one yet.
-
-```{r}
-annCol.names='group'
-annCol.lmBy='pressure'
-annCol.label ='^.*JM_(.+)_R1_001'
+useme.cols = 'RNA1'
+label.from.colname='^.*?RNA[^_]*?_([^_]+)_.*?R1_001' #this is unique
 samps = dir(path=readdir, pattern=readpattern)
 # trimmed sample labels
 samp.labels = gsub(label.from.colname,'\\1', samps)  
+
+```
+
+This helps annotate your STAR.data object. These are the "conditions"/"labels"/"groups" for your sample names, if FASTQ filenames contain this information. Use 'annCol.label' as a regex to extract condition identifiers from filenames. There can be multiple conditions if multiple matches are recovered () in the regex. The names of each condition in order recovered from the regex are specified in "names". Set "lm.By" to the names of the condition(s) you intend to use for differential expresion.
+If FASTQ filenames don't contain condition(s), bring them in from the metadata file in a later step and use a placeholder for "labels" now, like sample names.
+
+```{r}
+annCol.names='group'
+annCol.lmBy="ER Status"
+# FASTQ filenames are missing treatment groups.  Remake annCol from md.file.
+annCol.label = '^.*?RNA[^_]*?_([^_]+)_.*?R1_001' # samp labels for now
 ```
 
 ### Read in STAR output *finally*
@@ -101,10 +117,23 @@ Creates STAR.data "list" and writes to current directory (results/STAR) the foll
 - raw.gene.counts.Reads.csv
 - raw.gene.counts.RevReads.csv
 - raw.SJ.counts.UniqueReads.csv
+The gene counts files cover various strandedness states of RNAseq libraries.
 
 ```{r}
 # read in STAR alignments
 STAR.data = read_STAR(useme.cols=useme.cols,label.from.colname=label.from.colname,annCol.label=annCol.label,annCol.names=annCol.names,annCol.normBy=NULL,annCol.lmBy=annCol.lmBy,readpattern=readpattern,unstranded.col = list(gene.counts = c(1:4),SJ.counts = c(1:3,7)))
+
+### move this into read_STAR! ###
+# filter out SJs with too many NAs
+if(any( names(STAR.data$LoM.raw)=="SJ.counts" & exists("SJ.counts.na.frac") )){
+  STAR.data$SJ.counts.orig = STAR.data$LoM.raw$SJ.counts
+  for(tag in names(STAR.data$LoM.raw$SJ.counts) ){
+    STAR.data$LoM.raw$SJ.counts[[tag]] = 
+      STAR.data$LoM.raw$SJ.counts[[tag]][ 
+        rowSums(is.na(STAR.data$LoM.raw$SJ.counts[[tag]]))
+      <= (SJ.counts.na.frac*ncol(STAR.data$LoM.raw$SJ.counts[[tag]])), ]
+  }
+}
 ```
 
 * STAR.data structure=> list of list of list of list of matrices*
@@ -124,42 +153,16 @@ STAR.data = read_STAR(useme.cols=useme.cols,label.from.colname=label.from.colnam
     ]
   ]</blockquote>
 
-Object that holds the labels/groups/conditions of your project. Might need parsing from <proj>/data/expt.design.txt. This was done manually for now.
+The list `expt.design` is the variable that holds the labels/groups/conditions of your project as extracted from FASTQ filenames. If the FASTQ filenames don't have all the appropriate information, please replace this object with information from your metadata file, `md.file`.
 
 ```{r}
-annCol=STAR.data[["expt.design"]]
-```
+#annCol=STAR.data[["expt.design"]]
+# will bring in from md.file instead in this case
 
-###Check strandedness of dataset
-
-```{r}
-i = grep('gene', names(STAR.data$LoM.raw),ignore.case=T)[1]
-fwdmk = grepl('fwd|forward|sense', names(STAR.data$LoM.raw[[i]]), ignore.case=T)
-revmk = grepl('rev|anti', names(STAR.data$LoM.raw[[i]]), ignore.case=T)
-f = which(fwdmk)[1]; r = which(revmk)[1]; u = which(!fwdmk & !revmk)[1]
-if( any(is.na( c(f,r,u) )) ){
-  stop('Gene-based data must provide forward, reverse and unstranded types')
-}
-testv = log2(colSums(STAR.data$LoM.raw[[i]][[u]],na.rm=T)+1) - log2(colSums(STAR.data$LoM.raw[[i]][[f]],na.rm=T)+colSums(STAR.data$LoM.raw[[i]][[r]],na.rm=T)+1)
-if( sum(round(testv,0))>1 ){
-  stop("Forward and reverse reads don't add up to total reads!")
-} else {
-  testv =  log2(colSums(STAR.data$LoM.raw[[i]][[f]],na.rm=T)) - log2(colSums(STAR.data$LoM.raw[[i]][[r]],na.rm=T)+1)
-  if( sum(round(testv,0))>1){            # fwd strand excess over rev
-    myreads = names(STAR.data$LoM.raw[[i]])[f]
-    cat(" Using", myreads, "counts","\n")
-  } else if( sum(round(testv,0))<=-1){   # rev strand excess over fwd
-    myreads = names(STAR.data$LoM.raw[[i]])[r]
-    cat(" Using", myreads, "counts","\n")
-  } else {
-    myreads = names(STAR.data$LoM.raw[[i]])[u] # no strand inequality
-    cat(" Using", myreads, "counts","\n")
-  }
-}
 ```
 
 
-###Parse GTF used for parsing
+###Parse GTF used for genomic feature identification
 
 ```{r}
 gtf = readENSgtf(filename=gtfFile)
@@ -187,38 +190,71 @@ output normalized csv files in results/STAR directory
 - quant.SJ.counts.csv
 
 ```{r}
+myreads = STAR.data$myreads
 LoM.norms = vector(mode='list',length=length(STAR.data$LoM.raw))
 names(LoM.norms) = names(STAR.data$LoM.raw)
 for(tag in names(STAR.data$LoM.raw) ){
   if( length(STAR.data$LoM.raw[[tag]])>1 ){
-    LoM.norms[[tag]] = normMatrix(tag=tag,raw.mat=STAR.data$LoM.raw[[tag]][[myreads]],expt.design=STAR.data$expt.design)
+    LoM.norms[[tag]] = normMatrix(tag=tag,raw.mat=STAR.data$LoM.raw[[tag]][[myreads]])
   } else {
-    LoM.norms[[tag]] = normMatrix(tag=tag,raw.mat=STAR.data$LoM.raw[[tag]][[1]],expt.design=STAR.data$expt.design)
+    LoM.norms[[tag]] = normMatrix(tag=tag,raw.mat=STAR.data$LoM.raw[[tag]][[1]])
   }
 }
 ```
 
 
-###Check annotation file and colnames(STAR.data) match, subset samples that do match expt.design.txt 
+### Optionally read in metadata file
+This will create a 2nd metadata struture in addition to STAR.data$expt.design
 
 
 ```{r}
 ## custom: reannotate from metadata
+## run if necessary metadata is in file and not also in FASTQ file names
 md.dt = fread(md.file)
 # map annotation to read matrix
-idx2 = match( colnames(STAR.data$LoM.raw[[1]][[myreads]]), names(md.dt) )
+if( md.orientation == "byCol" ){ # samples are one per column
+  idx2 = match( colnames(STAR.data$LoM.raw[[1]][[myreads]]), names(md.dt) )
+} else { # samples are one per row
+  idx2 = match( colnames(STAR.data$LoM.raw[[1]][[myreads]]), md.dt[,get(md.IDcol)] )
+}
 idx1 = which(!is.na(idx2)); idx2 = idx2[idx1]
 if( sum(idx1==1:ncol(STAR.data$LoM.raw[[1]][[myreads]]))==ncol(STAR.data$LoM.raw[[1]][[myreads]]) ){
-  annCol = STAR.data$expt.design
-  namecol = setdiff( 1:ncol(md.dt), idx2 )
-  md.factors = as.character(md.dt[,namecol,with=F])
-  for(k in 1:nrow(md.dt) ){
-    annCol[[ md.dt[k,get(names(md.dt)[namecol])] ]][idx1] = 
-      as.character( md.dt[ k, mget(names(md.dt)[idx2]) ] )
+  if( md.orientation == "byCol" ){ # samples are one per column
+    annCol = NULL
+    namecol = setdiff( 1:ncol(md.dt), idx2 )
+    md.factors = as.character(md.dt[,namecol,with=F])
+    for(k in 1:nrow(md.dt) ){
+      annCol[[ md.dt[k,get(names(md.dt)[namecol])] ]][idx1] = 
+      as.vector( md.dt[ k, mget(names(md.dt)[idx2]) ] )
+    }
+  } else { # samples are one per row
+    annCol = NULL
+    namecol = setdiff( names(md.dt), md.IDcol )
+    md.factors = as.character(namecol)
+    for( k in setdiff(names(md.dt),md.IDcol) ){
+      annCol[[ k ]][idx1] = 
+      as.vector( md.dt[ idx2, get(k) ] )
+    }
   }
 } else {
   stop(paste("Some samples have no annotation in",md.file))
 }
+```
+
+
+### Optionally read in gene list files
+This will create a list of data tables
+
+
+```{r}
+
+priordata_v = dir(path=priordata.dir, pattern=priordata.pattern) 
+priordata_lsdt = NULL
+for( fil in priordata_v ){
+  myfil = file.path(priordata.dir,fil,fsep=if(grepl(paste0(.Platform$file.sep,"$"),priordata.dir)){''}else{.Platform$file.sep})
+  priordata_lsdt[[sub('.txt$','',fil)]] = fread(myfil)
+}
+
 ```
 
 
@@ -228,17 +264,16 @@ if( sum(idx1==1:ncol(STAR.data$LoM.raw[[1]][[myreads]]))==ncol(STAR.data$LoM.raw
 
 #qc.clusters
 # Plots for each design factor (default) or for factors specified in facSel
-#   1) Histogram of p values that were included in the design
-#   2) qvalue's default plots, with full qvalue range c(0,1) plotted
-#      Look for even descent to pi0 in the top left tuning plot
-#      The slow/steep rise in q-values in remaining plots depends on resolving power of data
-#   3) Optional MDS plot (bonusMDS=TRUE) at q-value cut (default 0.1, see below)
+#   1) MDS plot of samples based on all data rows
+#   2) heatmaps of the most variable rows (row SDs > overall SD)
 
-```{r}
+```{rp
 mytypes = names(LoM.norms)
 mynorms = names(LoM.norms[[1]])
-samp.labels = gsub('^[^.]+\\.','',colnames(LoM.norms[[1]][[1]]))
+# samp.labels is already set above -- no need to redo if set correctly
+#samp.labels = gsub('^[^.]+\\.','',colnames(LoM.norms[[1]][[1]]))
 grpBy = annCol [[annCol.lmBy]]
+annCol.plotme = c(annCol.lmBy,"DV200","RNA Yield (ng)")
 clim.pct=0.96
 histbins=20
 for(i in 1:length(mytypes) ){
@@ -257,23 +292,63 @@ for(i in 1:length(mytypes) ){
       rowmask = rowSums(rawmat>=quantile(rawmat,probs=hc.frac.cut,na.rm=T),na.rm=T) > (ncol(rawmat)/length(unique(grpBy)) ) & rowSums(is.na(normmat)) < (ncol(normmat)/length(unique(grpBy)) )
     }
     ans = summary.plots(rawmat=log2(rawmat +1), normmat=normmat, mynorm=mynorms[j], samp.labels=samp.labels, samp.classes=grpBy, plotdata=plotdata,plot2file=TRUE,histbins=histbins, colorspec=colors.rgb)
-    ans = qc.clusters(rawmat=log2(rawmat[rowmask,] +1), normmat=normmat[rowmask,], attribs=annCol, oneclass=annCol.lmBy, colorspec=colors.rgb, plotdata=plotdata, plot2file=TRUE, clim.pct=clim.pct)
+    ans = qc.clusters(rawmat=log2(rawmat[rowmask,] +1), normmat=normmat[rowmask,], attribs=annCol[annCol.plotme], oneclass=annCol.lmBy, colorspec=colors.rgb, plotdata=plotdata, plot2file=TRUE, clim.pct=clim.pct)
   }
 }
 ```
 
-### Run regression based on Group
+### Optionally plot bias-reduced data filtered by prior data
+```{r}
+
+# loop over count types, bias reductions and prior data sets
+# filter rows by prior data and regenerate heatmaps and MDS plots 
+# confirm plotting constants from above
+annCol.plotme = c(annCol.lmBy,"DV200","RNA Yield (ng)")
+for(i in 1:length(mytypes) ){
+  if( grepl('SJ',mytypes[i]) ){ #not the most robust way to find SJs
+    # map SJ positions to overlapping genes
+    # specifying defaults to fix "Gene" and Pos as colnames
+    gtf.col = c("Gene","Symbol","Chr","start","stop") 
+    pos.col = "Pos"
+    mySJ_dt = mapSJ2feature(STAR.data$LoM.raw[[ mytypes[i] ]][[1]], pos.col=pos.col, gtf.col=gtf.col, gtf.file=gtfFile, gtf.Rdir="/home/exacloud/lustre1/BioCoders/ProjectCollaborations/PSchedin_RNA161024PS/code/GenomicsFunctions") # min data rows for heatmap and MDS plots
+    # map gene IDs back to data matrix
+    idx2 = match( rownames(STAR.data$LoM.raw[[ mytypes[i] ]][[1]]), mySJ_dt[,get(pos.col)] )
+    idx1 = which(!is.na(idx2)); idx2 = idx2[idx1]
+  }
+  for(j in 1:length(mynorms)){
+    # set up matrices and config for plotting
+    normmat= LoM.norms[[ mytypes[i] ]][[ mynorms[j] ]]
+    colnames(normmat)=samp.labels
+    if( grepl('SJ',mytypes[i]) ){ #not the most robust way to find SJs
+      # this depends on normmat and raw data having same row order
+      rownames(normmat)[idx1] = mySJ_dt[idx2,get(gtf.col[1])]
+    }
+    # loop over prior data sets
+    for(k in 1:length(priordata_lsdt) ){
+    plotdata = list(plotdir='.',plotbase=paste(mynorms[j],mytypes[i],names(priordata_lsdt)[k],sep='.'),plottitle=paste(proj.title,names(priordata_lsdt)[k]) )
+    rowmask = rownames(normmat) %chin% priordata_lsdt[[k]][,get(priordata.geneID)]
+      ans = qc.clusters(rawmat=normmat[rowmask,], normmat=normmat[rowmask,], attribs=annCol[annCol.plotme], oneclass=annCol.lmBy, colorspec=colors.rgb, plotdata=plotdata, plot2file=TRUE, clim.pct=clim.pct)
+    }
+  }
+}
+
+
+```
+
+### Run regression based on experimental design and/or technical parameters
 ```{r}
 regress_lsls = vector(mode='list',length=length(STAR.data$LoM.raw))
 names(regress_lsls) = names(STAR.data$LoM.raw)
-contr_ls = list(pressure=list(baseline="Naive",contr.FUN="contr.treatment"))
-#set baseline for regression in group of intereset i.e. pressure, baseline = "Naive"
+contr_ls = list("ER Status"=list(baseline="positive",contr.FUN="contr.treatment"))
+# set baseline for regression in parameter(s) of interest
+# contr.treatment generates regression coefficients that are like (adjusted mean) ratios of other groups to the baseline group.
+# contr.sum generates coefficients that are like (adjusted mean) ratios to average all for all but the mandadory ommitted treatment group (because there is always one fewer independent pairwise comparison than there are pairs).
 
-lm_expr = "y ~ pressure"
+lm_expr = "y ~ `ER Status`"
 rowmask_ls = vector(mode='list',length=length(STAR.data$LoM.raw))
 names(rowmask_ls) = names(STAR.data$LoM.raw)
 for(i in 1:length(mytypes) ){
-  for(j in 1:length(mynorms)){
+  for(j in which(!mynorms %in% do.not.regress) ){
     # set up data matrices
     if( length(STAR.data$LoM.raw[[ mytypes[i] ]])>1 ){
       rawmat = STAR.data$LoM.raw[[ mytypes[i] ]][[myreads]]
@@ -282,80 +357,92 @@ for(i in 1:length(mytypes) ){
     }
     tmp = unlist(lapply(contr_ls,function(x){x$baseline}))
     tmp=paste(names(tmp),tmp,sep=".")
-    plotdata = list(plotdir='./',plotbase=paste(mynorms[j],mytypes[i],tmp,sep='.'),plottitle=proj.title)
+    plotdata = list(plotdir='./',plotbase=paste(mynorms[j],mytypes[i],'vs',tmp,sep='.'),plottitle=proj.title)
     normmat= LoM.norms[[ mytypes[i] ]][[ mynorms[j] ]]
     colnames(rawmat)=samp.labels; colnames(normmat)=samp.labels
     # prepare rowmask for heatmap/MDS (remove non-expr or low expr>hclustlim)
     rowmask = rowSums(rawmat>1,na.rm=T) > (ncol(rawmat)/length(unique(grpBy)) ) & rowSums(is.na(normmat)) <= na.lim
     rowmask_ls[[ mytypes[i] ]][[ mynorms[j] ]] = rowmask # save for later
     # regression
-    regress_lsls[[mytypes[i]]][[mynorms[j]]] = regressMatrix(normmat[rowmask,], expt.design=annCol, lm_expression=lm_expr, contr_list = contr_ls, plot2file = TRUE, plotdata = plotdata)
+    regress_lsls[[mytypes[i]]][[mynorms[j]]] = regressMatrix(normmat[rowmask,], expt.design=annCol[annCol.lmBy], lm_expression=lm_expr, contr_list = contr_ls, plot2file = TRUE, plotdata = plotdata)
   }
 }
 ```
 
 ### preview results
 ```{r}
-topn=1500
+topn=500 # number with which to play
 for( i in 1:length(mytypes) ){
-  for( j in 1:length(mynorms) ){
+  for( j in which(!mynorms %in% do.not.regress) ){
     ans = regress_lsls[[mytypes[i]]][[mynorms[j]]]$q_list
-    cat("1-pi0",mytypes[i],mynorms[j],signif(unlist(lapply(2:length(ans),function(x){1-ans[[x]]$pi0})),2),"\n")
-    cat("top",mytypes[i],mynorms[j],signif(unlist(lapply(2:length(ans),function(x){quantile(ans[[x]]$qvalues,probs=topn/length(ans[[x]]$qvalues))})),3),topn,"out of",length(ans[[2]]$qvalues),"\n")
+    cat(mytypes[i],mynorms[j],"1-p0:",signif(unlist(lapply(2:length(ans),function(x){1-ans[[x]]$pi0})),2),"\n")
+    cat(mytypes[i],mynorms[j],"qcut:",signif(unlist(lapply(2:length(ans),function(x){quantile(ans[[x]]$qvalues,probs=topn/length(ans[[x]]$qvalues))})),3),"returns ~",topn,"out of",length(ans[[2]]$qvalues),"\n")
 }}
 ```
 
 
 # Plots for each design factor (default) or for factors specified in facSel
 #   1) Histogram of p values that were included in the design
+#      Look for a peak on the left, and no peaks in the middle or on the right
 #   2) qvalue's default plots, with full qvalue range c(0,1) plotted
-#      Look for even descent to pi0 in the top left tuning plot
+#      Look for descent to pi0 in the top left tuning plot with good asymptote
 #      The slow/steep rise in q-values in remaining plots depends on resolving power of data
 
 ```{r}
-ngene_v = c(500,1500,3000)
-lmBy = attr(annCol,"lmBy")
+lmBy = annCol.lmBy
 histbins=20
-screen_lsmk = vector(mode='list',length=length(STAR.data$LoM.raw))
-names(screen_lsmk) = names(STAR.data$LoM.raw)
 for( i in 1:length(mytypes) ){
-  for( j in 1:length(mynorms) ){
+  for( j in which(!mynorms %in% do.not.regress) ){
     normmat= LoM.norms[[ mytypes[i] ]][[ mynorms[j] ]]
     colnames(normmat)=samp.labels
     reg_ls = regress_lsls[[mytypes[i]]][[mynorms[j]]]
-    mymk= rowmask_ls[[mytypes[i]]][[mynorms[j]]]
+    mymask= rowmask_ls[[mytypes[i]]][[mynorms[j]]]
     # pull out regression design and set up plot config
     tmp = unlist(lapply(contr_ls,function(x){x$baseline}))
     tmp=paste(names(tmp),tmp,sep=".")
     plotdata = list(plotdir='./',plotbase=paste(mynorms[j],mytypes[i],tmp,sep='.'),plottitle=proj.title)
-    for( ngenes in ngene_v ){ # number of top genes by q- or p-value to plot
-      for(fac in names(reg_ls$q_list)[grep(lmBy,names(reg_ls$q_list))] ){
-        pdata = plotdata
-        pdata$plotbase = paste(plotdata$plotbase,make.names(fac),ngenes,sep='.')
-        ans = qcQvalues(norm_x=normmat[mymk,], pvalue_v=reg_ls$p_mat[,fac], obj_qvalue=reg_ls$q_list[[fac]], qcut=ngenes, attribs=annCol, oneclass=lmBy, plotdata=pdata, colorspec=colors.rgb, histbins=histbins, plot2file=TRUE)
-        screen_lsmk[[mytypes[i]]][[mynorms[j]]][paste(fac,ngenes,sep=":")] = ans['rowmask']
-      }
+    for(fac in names(reg_ls$q_list)[grep(lmBy,names(reg_ls$q_list))] ){
+      pdata = plotdata
+      pdata$plotbase = paste(plotdata$plotbase,make.names(fac),sep='.')
+      ans = qcQvalues(norm_x=normmat[mymask,], pvalue_v=reg_ls$p_mat[,fac], obj_qvalue=reg_ls$q_list[[fac]], attribs=annCol[lmBy], oneclass=lmBy, plotdata=pdata, colorspec=colors.rgb, histbins=histbins, plot2file=TRUE)
     }
   }
 }
 ```
 
-
+# Build of ratios to baselines for desired design factors 
+# Also build masks selecting genes based on q-values per factor 
+#  and follow-up considerations such as expression level and fold change
+# Loop over q-value cuts to assist with final cut selection.
+# Plot heatmaps and MDS plots based on selected genes and designed ratios
 
 ```{r}
-ratioby_ls = list(pressure=contr_ls$pressure$baseline)
+# cuts
+ngene_v = c(200,500,1000) # q-value cuts by number; can also cut by q-value
+ratioby_ls = list("ER Status"=contr_ls$`ER Status`$baseline)
 ratio_fold = 1.3
 intensity_fold = 2
-cut_ls = list(q_combine="OR", rcut_fold=ratio_fold, icut_fold=intensity_fold)
+priordata_IDs = unique(unlist(lapply(priordata_lsdt,function(x){x[,get(priordata.geneID)]})))
+cut_ls = list(q_combine="OR", rcut_fold=ratio_fold, icut_fold=intensity_fold, include_ID=priordata_IDs)
+# settings for heatmaps
+annCol.plotme = c(annCol.lmBy,"DV200","RNA Yield (ng)") # heatmap tracks
+clustrowmin = 10 # min data rows for heatmap and MDS plots
 # save ratios and selections
 select_lsmk = vector(mode='list',length=length(STAR.data$LoM.raw))
 names(select_lsmk) = names(STAR.data$LoM.raw)
 ratio_lsmat = vector(mode='list',length=length(STAR.data$LoM.raw))
 names(ratio_lsmat) = names(STAR.data$LoM.raw)
 for( i in 1:length(mytypes) ){
-  for( j in 1:length(mynorms) ){
+  for( j in which(!mynorms %in% do.not.regress) ){
     normmat= LoM.norms[[ mytypes[i] ]][[ mynorms[j] ]]
     colnames(normmat)=samp.labels
+    if( grepl('SJ',mytypes[i]) ){ #not the most robust way to find SJs
+      # map gene IDs back to data matrix using mapping built earlier
+      # this enables include_ID to select rows
+      idx2 = match( rownames(STAR.data$LoM.raw[[ mytypes[i] ]][[1]]), mySJ_dt[,get(pos.col)] )
+      idx1 = which(!is.na(idx2)); idx2 = idx2[idx1]
+      rownames(normmat)[idx1] = mySJ_dt[idx2,get(gtf.col[1])]
+    }
     mymask= rowmask_ls[[mytypes[i]]][[mynorms[j]]]
     reg_ls = regress_lsls[[mytypes[i]]][[mynorms[j]]]$q_list
     reg_ls = reg_ls[!grepl('Intercept',names(reg_ls))]
@@ -365,7 +452,12 @@ for( i in 1:length(mytypes) ){
       cut_ls$qcut = ngenes
       pdata = plotdata
       pdata$plotbase = paste(plotdata$plotbase,'ratio.vs',ratioby_ls$strain,ngenes,sep='.')
-      ans = designRatios(normmat[mymask,], attribs=annCol, ratioby_ls=ratioby_ls, cut_ls=cut_ls)
+      # this function makes the ratios and cuts
+      ans = designRatios(normmat[mymask,], q_list=reg_ls, attribs=annCol[annCol.plotme], ratioby_ls=ratioby_ls, cut_ls=cut_ls)
+      # this function creates the heatmap and MDS plot
+      if( sum(ans$rowmask)>clustrowmin ){
+        ans2= plotRatios( ratiomat=ans$ratiomat, attribs=annCol[annCol.plotme], oneclass=lmBy, plotdata=pdata, colorspec=colors.rgb, rowmask=ans$rowmask, plot2file=TRUE)
+      }
       # save selections
       select_lsmk[[mytypes[i]]][[mynorms[j]]][paste(fac,ngenes,sep=":")] = ans['rowmask']
     }
@@ -374,6 +466,7 @@ for( i in 1:length(mytypes) ){
   }
 }
 ```
+
 
 ###Produce Scatter plots based on lmBy
 ```{r}
@@ -384,16 +477,6 @@ for( i in 1:length(mytypes) ){
     plotdata = list(plotdir='./',plotbase=paste(mynorms[j],mytypes[i],'Scatter',lmBy,sep=':'),plottitle=proj.title)
     scatterplot(scatter_mat, attribs=annCol[[lmBy]],plotdata=plotdata,plot2file = TRUE) 
   }
-}
-```
-
-
-###Plot Ratios DE heatmaps and MDS plots 
-```{r}
-for( j in 1:length(mynorms) ){
-  ratiomat = ratio_lsmat[[mytypes[1]]][[mynorms[j]]]
-  plotdata = list(plotdir='./',plotbase=paste(mynorms[j],mytypes[1],'Heat&MDS',lmBy,sep=':'),plottitle=proj.title)
-  plotRatios(ratiomat=ratiomat,attribs=annCol,'pressure',plotdata=plotdata, colorspec = colors.rgb, plot2file = TRUE)
 }
 ```
 
