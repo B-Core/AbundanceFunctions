@@ -1,4 +1,3 @@
-
 # Notes about functions in this repository
 
 See 
@@ -7,7 +6,7 @@ See
 
 For examples of RNA-Seq workflows that use these functions.
 
-##Summarize.R (updated 6 Dec., 2016) 
+## Summarize.R (updated 6 Dec., 2016) 
 Summarize\_by\_some\_custom\_ID in Summarize.R of this repo. still needs some improvement because it relies on the Oligo package from BioConductor, which is not well-coordinated with Affymetrix releases. It's likely that under the hood, oligo::rma() relies on properly processing the .cdf file, which we know for a fact does not always happen with certain array types.
 
 One perhaps insightful observation, for instance, is that summarized_mat generated from:
