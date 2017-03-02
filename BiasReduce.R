@@ -1,8 +1,10 @@
 ################################################################################
 # Functions involved in reducing technical bias
 #
-# normMatrix       --- apply bias reduction methods to data matrices
-# normalizeLoess   --- fork of normalize.loess with NA tolerance
+# uniformBkgd    --- Original background function using quantiles
+# fittedBkgd     --- Model-based variance-stabilizing transformation for Illumina microarray data
+# normMatrix     --- apply bias reduction methods to data matrices
+# normalizeLoess --- fork of normalize.loess with NA tolerance
 #
 # Authors: Theresa Lusardi, Julja Burchard, and Mark Fisher
 # Started - July 2016
