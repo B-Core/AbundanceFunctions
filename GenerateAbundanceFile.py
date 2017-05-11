@@ -9,8 +9,10 @@ from operator import itemgetter
 
 
 def generate_meta_file(read_dir, sample_meta_data_list, select_meta_data_list, split_hyphen=None):
-    # Generates a meta_file
-    # by column orientation
+    """
+    Generates a meta_file
+    by column orientation
+    """
     sample_meta_data_list = sample_meta_data_list.strip().split(',')
     select_meta_data_list = select_meta_data_list.strip().split(',')
 
@@ -89,17 +91,70 @@ def generate_abundance_script(read_dir, meta_file, code_dir, taxID, gtfFile, pro
                               baseline, SampleID="SampleID", mart_dataset="mmusculus_gene_ensembl",
                               lmBy="ID_Group", gtf_feature="gene", read_pattern="^RNA1", useme_cols="RNA1",
                               label_from_colname="^.*?RNA[^_]*?_([^_]+)_.*", path_type="gene.counts",
-                              path_norms="loess"):
+                              path_norms="loess", covariate=False):
     gtf_read_dir = '/'.join(gtfFile.split('/')[:-1])
     log = '/'.join(code_dir.split('/')[:-2])
     out_f = open(os.path.join(log, project_title + '_analysis.R'), 'w')
+
+    code_context = {"code_dir": code_dir, "meta_file": meta_file, "SampleID": SampleID, "taxID": taxID,
+                    "gtfFile": gtfFile, "gtf_feature": gtf_feature, "project_title": project_title,
+                    "gtf_read_dir": gtf_read_dir, "read_dir": read_dir, "read_pattern": read_pattern,
+                    "useme_cols": useme_cols, "lmBy": lmBy, "baseline": baseline, "path_type": path_type,
+                    "path_norms": path_norms, "mart_dataset": mart_dataset, "label_from_colname": label_from_colname}
+
+    if not covariate:
+        contrast_str = """contr_ls = list("{lmBy}" = list(baseline="{baseline}", contr.FUN = "contr.treatment"))""".format(**code_context)
+        lm_expr = "y ~ {lmBy}".format(**code_context)
+        code_context['lm_expr'] = lm_expr
+        code_context['contr_ls'] = contrast_str
+        code_context['annColplotme'] = '"%s"' % lmBy
+        code_context['annCollmBy'] = '"%s"' % lmBy
+        code_context['oneclass'] = '"%s"' % lmBy
+    else:
+        if len(covariate.split(',')) != len(baseline.split(',')):
+            print """Provide co-variates and their associated baselines in ordered comma delimited list .ie
+
+            covariate = 'Time,Pressure'
+            baseline = '0Hr,0mmHg'
+
+            resulting in:
+
+            contr_ls = list(Time = list(baseline="0Hr", contr.FUN = "contr.treatment"), Pressure = list(baseline="0mmHg", contr.FUN = "contr.treatment"))
+
+            &
+
+            lm_expr = 'y ~ Time + Pressure
+
+            ***Note***
+            Both Time and Pressure need to be column headers in the table provided as an argument to expt.design in regressMatrix
+
+            covariate list provided:
+            """
+            print covariate.split(',')
+            print "baseline list provided:"
+            print baseline.split(',')
+        else:
+            code_context['oneclass'] = '"%s"' % lmBy
+            covariate_list = covariate.split(',')
+            baseline_list = baseline.split(',')
+            lm_expr = "y ~ " +' + '.join(covariate_list)
+            code_context['lm_expr'] = lm_expr
+            cov_str = ""
+            for i in range(len(zip(covariate_list,baseline_list))):
+                cov_str += """'%s' = list(baseline='%s', contr.FUN = 'contr.treatment'),"""%(covariate_list[i],baseline_list[i])
+            covariate_str = "list(" + cov_str[:-1] + ")"
+            code_context['contr_ls'] = covariate_str
+            reformat_covariate = '"'+'","'.join(covariate_list)+'"'
+            code_context['annColplotme'] = 'c(%s)'%reformat_covariate
+            code_context['annCollmBy'] = 'c(%s)'%reformat_covariate
+
 
     code = """
 require(data.table)
 require(NMF)
 require(affy)
 require(limma)
-require(AnnotationDbi)
+#require(AnnotationDbi)
 require(biomaRt)
 source("{code_dir}AbundanceFunctions/BiasReduce.R")
 source("{code_dir}AbundanceFunctions/ExtractTransformLoad.R")
@@ -116,11 +171,11 @@ source("{code_dir}BcorePlotting/ClusteringPlots.R")
 setwd("{read_dir}")
 
 dir.create(file.path(getwd(),'{project_title}'),showWarnings=FALSE)
-
+oneclass = {oneclass}
 # constants
 # max data rows for hclust
 hclust.limit = 2^16
-
+annCol.lmBy = {annCollmBy}
 # quantile of data distribution reqd in one group's worth of data if too many rows for hclust()
 hc.frac.cut = 0.75;
 SJ.counts.na.frac = 0.25;
@@ -158,12 +213,17 @@ samps = dir(path=readdir, pattern=readpattern)
 samp.labels = gsub(label.from.colname,'\\\\1', samps)
 
 annCol.names = "group"
-annCol.lmBy = "{lmBy}"
 annCol.label = "{label_from_colname}"
 
 # read in STAR alignments
+
+print("Read in Abundance data")
+
 STAR.data = read_STAR(useme.cols=useme.cols,label.from.colname=label.from.colname,annCol.label=annCol.label,annCol.names=annCol.names,annCol.normBy=NULL,annCol.lmBy=annCol.lmBy, readpattern=readpattern, unstranded.col=list(gene.counts=c(1:4), SJ.counts=c(1:3,7)))
 
+print("Read in Abundance data : Complete")
+
+print("Filter SJ.counts data")
 # filter out SJs with too many NAs
 {{
     if(any( names(STAR.data$LoM.raw)=="SJ.counts" & exists("SJ.counts.na.frac")))
@@ -175,6 +235,7 @@ STAR.data = read_STAR(useme.cols=useme.cols,label.from.colname=label.from.colnam
       }}
     }}
 }}
+print("Filtering SJ.counts : Complete")
 save.image("./{project_title}.RData")
 
 gtf = readENSgtf(filename=gtfFile)
@@ -194,6 +255,7 @@ rm(tmp)
 
 myreads = STAR.data$myreads
 
+print("Filter gene.counts data")
 
 {{
     if(any( names(STAR.data$LoM.raw)=="gene.counts"))
@@ -205,12 +267,16 @@ myreads = STAR.data$myreads
       }}
     }}
 }}
+
+print("Filtering gene.counts : Complete")
+
 save.image("./{project_title}.RData")
 
 LoM.norms = vector(mode='list',length=length(STAR.data$LoM.raw))
 names(LoM.norms) = names(STAR.data$LoM.raw)
 
 
+print("Bias reduction with normMatrix")
 
 for(tag in names(STAR.data$LoM.raw))
 {{
@@ -223,12 +289,18 @@ for(tag in names(STAR.data$LoM.raw))
     LoM.norms[[tag]] = normMatrix(tag=tag,raw.mat=STAR.data$LoM.raw[[tag]][[1]])
   }}
 }}
+
+print("Bia reduction with normMatrix : Complete")
+
 save.image("./{project_title}.RData")
 
 ## custom: reannotate from metadata
 ## run if necessary metadata is in file and not also in FASTQ file names
-md.dt = fread("{meta_file}")
 # map annotation to read matrix
+md.dt = fread("{meta_file}")
+
+print("Evaluate meta-data file for sample name consistency")
+
 {{
     if( md.orientation == "byCol" ){{ # samples are one per column
       idx2 = match( colnames(STAR.data$LoM.raw[[1]][[myreads]]), names(md.dt) )
@@ -269,15 +341,21 @@ idx1 = which(!is.na(idx2)); idx2 = idx2[idx1]
     }}
 }}
 
+print("Evaluation of meta-data : Complete")
+
 mytypes = names(LoM.norms)
 mynorms = names(LoM.norms[[1]])
 
-grpBy = annCol [[annCol.lmBy]]
-annCol.plotme = c(annCol.lmBy)
+#grpBy = annCol[[annCol.lmBy]]
+grpBy = annCol[[oneclass]]
+annCol.plotme = {annColplotme}
 clim.pct=0.96
 histbins=20
 dir.create(file.path(getwd(),'{project_title}/summary.plotsPlots'),showWarnings=FALSE)
 dir.create(file.path(getwd(),'{project_title}/qc.clustersPlots'),showWarnings=FALSE)
+
+print("Generate summary and qc.cluster plots")
+
 for(i in 1:length(mytypes) )
 {{
   for(j in 1:length(mynorms))
@@ -304,23 +382,33 @@ for(i in 1:length(mytypes) )
 
     ans = summary.plots(rawmat=log2(rawmat +1), normmat=normmat, mynorm=mynorms[j], samp.labels=samp.labels, samp.classes=grpBy, plotdata=plotdata,plot2file=TRUE,histbins=histbins, colorspec=colors.rgb)
     plotdata = list(plotdir='./{project_title}/qc.clustersPlots',plotbase=paste(mynorms[j],mytypes[i],sep='.'),plottitle=proj.title)
-    ans = qc.clusters(rawmat=log2(rawmat[rowmask,] +1), normmat=normmat[rowmask,], attribs=annCol[annCol.plotme], oneclass=annCol.lmBy, colorspec=colors.rgb, plotdata=plotdata, plot2file=TRUE, clim.pct=clim.pct)
+    ans = qc.clusters(rawmat=log2(rawmat[rowmask,] +1), normmat=normmat[rowmask,], attribs=annCol[annCol.plotme], oneclass=oneclass, colorspec=colors.rgb, plotdata=plotdata, plot2file=TRUE, clim.pct=clim.pct)
   }}
 }}
+
+print("Generate summary and qc.cluster plots : Complete")
 
 save.image("./{project_title}.RData")
 
 regress_lsls = vector(mode='list',length=length(STAR.data$LoM.raw))
 names(regress_lsls) = names(STAR.data$LoM.raw)
-contr_ls = list("{lmBy}"=list(baseline="{baseline}",contr.FUN="contr.treatment"))
+
+#contr_ls = list("{lmBy}"=list(baseline="{baseline}",contr.FUN="contr.treatment"))
+contr_ls = {contr_ls}
+
 # set baseline for regression in parameter(s) of interest
 # contr.treatment generates regression coefficients that are like (adjusted mean) ratios of other groups to the baseline group.
 # contr.sum generates coefficients that are like (adjusted mean) ratios to average all for all but the mandadory ommitted treatment group (because there is always one fewer independent pairwise comparison than there are pairs).
 
-lm_expr = "y ~ {lmBy}"
+
+lm_expr = "{lm_expr}"
+
 rowmask_ls = vector(mode='list',length=length(STAR.data$LoM.raw))
 names(rowmask_ls) = names(STAR.data$LoM.raw)
 dir.create(file.path(getwd(),'{project_title}/regressMatrixPlots'),showWarnings=FALSE)
+
+print("RegressMatrix with specified contrasts")
+
 for(i in 1:length(mytypes))
 {{
   for(j in which(!mynorms %in% do.not.regress))
@@ -351,6 +439,9 @@ for(i in 1:length(mytypes))
   }}
 }}
 
+print("RegressMatrix with specified contrasts : Complete")
+
+save.image("./{project_title}.RData")
 
 topn=500 # number with which to play
 
@@ -378,6 +469,9 @@ histbins=20
 select_lsmk = vector(mode='list',length=length(STAR.data$LoM.raw))
 names(select_lsmk) = names(STAR.data$LoM.raw)
 dir.create(file.path(getwd(),'{project_title}/qcQvaluePlots'),showWarnings=FALSE)
+
+print("Perform qcQvalue & Generate masks")
+
 for( i in 1:length(mytypes))
 {{
   for( j in which(!mynorms %in% do.not.regress))
@@ -393,17 +487,25 @@ for( i in 1:length(mytypes))
 
     plotdata = list(plotdir='./{project_title}/qcQvaluePlots',plotbase=paste(mynorms[j],mytypes[i],tmp,sep='.'),plottitle=proj.title)
 
-    for(fac in names(reg_ls$q_list)[grep(lmBy,names(reg_ls$q_list))])
+    ##for(fac in names(reg_ls$q_list)[grep(lmBy,names(reg_ls$q_list))])
+
+    for(fac in names(reg_ls$q_list))
     {{
-      pdata = plotdata
-      pdata$plotbase = paste(plotdata$plotbase,make.names(fac),sep='.')
-      ans = qcQvalues(norm_x=normmat[mymask,], pvalue_v=reg_ls$p_mat[,fac], obj_qvalue=reg_ls$q_list[[fac]], attribs=annCol[lmBy],
-      oneclass=lmBy, plotdata=pdata, colorspec=colors.rgb, histbins=histbins, plot2file=TRUE)
-      select_lsmk[[mytypes[i]]][[mynorms[j]]][paste(fac)] = ans['rowmask']
+      if(!fac %in% '(Intercept)')
+      {{
+        pdata = plotdata
+        pdata$plotbase = paste(plotdata$plotbase,make.names(fac),sep='.')
+        ans = qcQvalues(norm_x=normmat[mymask,], pvalue_v=reg_ls$p_mat[,fac], obj_qvalue=reg_ls$q_list[[fac]], attribs=annCol[lmBy],
+        oneclass=oneclass, plotdata=pdata, colorspec=colors.rgb, histbins=histbins, plot2file=TRUE)
+        select_lsmk[[mytypes[i]]][[mynorms[j]]][paste(fac)] = ans['rowmask']
+      }}
     }}
   }}
 }}
 
+print("Perform qcQvalue & Generate masks : Complete")
+
+save.image("./{project_title}.RData")
 
 # Build of ratios to baselines for desired design factors
 # Also build masks selecting genes based on q-values per factor
@@ -420,13 +522,16 @@ intensity_fold = 2
 cut_ls = list(q_combine="OR", rcut_fold=ratio_fold, icut_fold=intensity_fold)
 
 # settings for heatmaps
-annCol.plotme = annCol.lmBy # heatmap tracks
+#annCol.plotme = annCol.lmBy # heatmap tracks
+
 clustrowmin = 10 # min data rows for heatmap and MDS plots
 
 # save ratios and selections
 
 ratio_lsmat = vector(mode='list',length=length(STAR.data$LoM.raw))
 names(ratio_lsmat) = names(STAR.data$LoM.raw)
+
+print("Perform PlotRatios")
 
 dir.create(file.path(getwd(),'{project_title}/plotRatiosPlots'),showWarnings=FALSE)
 for( i in 1:length(mytypes))
@@ -457,7 +562,8 @@ for( i in 1:length(mytypes))
     reg_ls = reg_ls[!grepl('Intercept',names(reg_ls))]
     plotdata = list(plotdir='./{project_title}/plotRatiosPlots',plotbase=paste(mynorms[j],sub('counts','ratios',mytypes[i]),'minratio',paste0(ratio_fold,'x'),'minexpr',round(min(normmat,na.rm=T)+log2(intensity_fold),1),sep='.'),plottitle=proj.title)
 
-    for(fac in names(reg_ls)[grep(lmBy,names(reg_ls))])
+    #for(fac in names(reg_ls)[grep(lmBy,names(reg_ls))])
+    for(fac in names(reg_ls))
     {{
         for( ngenes in ngene_v )
         {{
@@ -472,7 +578,7 @@ for( i in 1:length(mytypes))
           # this function creates the heatmap and MDS plot
           if( sum(ans$rowmask)>clustrowmin )
           {{
-            ans2= plotRatios( ratiomat=ans$ratiomat, attribs=annCol[annCol.plotme], oneclass=lmBy, plotdata=pdata, colorspec=colors.rgb, rowmask=ans$rowmask, plot2file=TRUE)
+            ans2= plotRatios( ratiomat=ans$ratiomat, attribs=annCol[annCol.plotme], oneclass=oneclass, plotdata=pdata, colorspec=colors.rgb, rowmask=ans$rowmask, plot2file=TRUE)
           }}
           # save selections
           select_lsmk[[mytypes[i]]][[mynorms[j]]][paste(fac,ngenes,sep="_")] = ans['rowmask']
@@ -483,20 +589,31 @@ for( i in 1:length(mytypes))
   }}
 }}
 
+print("Perform PlotRatios : Complete")
+
+save.image("./{project_title}.RData")
 
 dir.create(file.path(getwd(),'{project_title}/PairwiseScatter'),showWarnings=FALSE)
+
+print("Perform Pairwise Scatter")
+
 for( i in 1:length(mytypes))
 {{
   for( j in 1:length(mynorms))
   {{
     normmat = LoM.norms[[ mytypes[i] ]][[ mynorms[j] ]]
-    attribs = annCol[[lmBy]]
+    attribs = annCol[[oneclass]]
     plotdir = paste(getwd()[1], "/{project_title}/PairwiseScatter/",sep='')
     plotdata = list(plotdir=plotdir,plotbase=paste(mynorms[j],mytypes[i],'Scatter',lmBy,sep=':'),plottitle=proj.title)
     scatterplot(normmat, attribs=attribs, plotdata=plotdata, plot2file=TRUE)
   }}
 }}
 
+print("Perform Pairwise Scatter : Complete")
+
+save.image("./{project_title}.RData")
+
+print("Perform biomaRt gene annotation")
 
 ratio_mat = ratio_lsmat[["{path_type}"]][["{path_norms}"]]
 reg_ls = regress_lsls[["{path_type}"]][["{path_norms}"]]
@@ -505,6 +622,8 @@ ID = rownames(ratio_mat)
 
 project_species = useMart("ENSEMBL_MART_ENSEMBL", dataset = "{mart_dataset}", host = "dec2016.archive.ensembl.org")
 human = useMart("ENSEMBL_MART_ENSEMBL", dataset = "hsapiens_gene_ensembl", host = "dec2016.archive.ensembl.org")
+
+print("biomaRt gene annotations : Loaded")
 
 hsa_entrezID = getLDS(attributes = "ensembl_gene_id",mart = project_species,  attributesL = "entrezgene", martL = human)
 Entrez.ID = character(length(ID))
@@ -524,6 +643,9 @@ idx1 = which(!is.na(idx2)); idx2= idx2[idx1]
 Anno.Symbol[idx1] = unlist(hsa_symbol$HGNC.symbol[idx2]);
 # assemble IDs for annotation
 
+print("Species event ID's mapped to Hsapiens_gene_ensembl")
+
+
 backgroundset = as.data.table(cbind(ID, Entrez.ID, Anno.Symbol))
 
 # assemble signatures
@@ -532,6 +654,9 @@ reg_ls = regress_lsls$gene.counts${path_norms}
 
 masks = names(select_lsmk[["{path_type}"]][["{path_norms}"]])
 dir.create(file.path(getwd(),'{project_title}/tables'),showWarnings=FALSE)
+
+print("Perform pathway enrichment for all factor levels relative to baseline")
+
 for (k in masks)
 {{
     sig_gmt = NULL
@@ -552,19 +677,21 @@ for (k in masks)
         return.OM=TRUE, ecut=0.05, ocut=5)
 }}
 
+print("Perform pathway enrichment for all factor levels relative to baseline : Complete")
+
+print("Generate Abundance and Ratio table with associated q-value and p-values")
+
 gtf.Rdir = "{gtf_read_dir}"
 
 out_norm_mat = LoM.norms$gene.counts$loess[rowmask_ls${path_type}${path_norms},]
-out_table = outputTable(normmat= out_norm_mat, gtf.file = "{gtfFile}",ratiomat = ratio_lsmat${path_type}${path_norms}, q_list=reg_ls$q_list, gtf.Rdir=genome.func)
+out_table = outputTable(normmat= out_norm_mat, gtf.file = "{gtfFile}",ratiomat = ratio_lsmat${path_type}${path_norms}, q_list=reg_ls$q_list, gtf.Rdir=genome.func, gtf.key='transcript')
 write.csv(out_table, row.names = FALSE, file=file.path(getwd(), './{project_title}/tables', paste("{project_title}","{path_norms}","Normed_with_Ratio_and_Abundance.csv", sep="_")),quote=FALSE)
+
+print("Generate Abundance and Ratio table with associated q-value and p-values : Complete")
+
 save.image("./{project_title}.RData")
 """
     reformatted_code = textwrap.dedent(code).strip()
-    code_context = {"code_dir": code_dir, "meta_file": meta_file, "SampleID": SampleID, "taxID": taxID,
-                    "gtfFile": gtfFile, "gtf_feature": gtf_feature, "project_title": project_title,
-                    "gtf_read_dir": gtf_read_dir, "read_dir": read_dir, "read_pattern": read_pattern,
-                    "useme_cols": useme_cols, "lmBy": lmBy, "baseline": baseline, "path_type": path_type,
-                    "path_norms": path_norms, "mart_dataset": mart_dataset, "label_from_colname": label_from_colname}
     out_f.write(reformatted_code.format(**code_context))
     out_f.close()
 
@@ -585,9 +712,10 @@ def main():
     abundancegroup.add_argument("-t", "--taxID", type=str, help="TaxID can be found www.ncbi.nlm.nih.gov/Taxonomy/TaxIdentifier/tax_identifier.cgi")
     abundancegroup.add_argument("-g", "--gtfFile", type=str, help="Absolute path to gtf used for alignment")
     abundancegroup.add_argument("-p", "--project_title", type=str, help="Project title associated with abundance dataset. (Will be incorporated into base file name of plots)")
-    abundancegroup.add_argument("-b", "--baseline", type=str, help="Baseline to generate contrasts against when generating lm")
+    abundancegroup.add_argument("-b", "--baseline", type=str, help="Baseline to generate contrasts against when generating lm",default=False)
 
     optabundancegroup = parser.add_argument_group('Optional Abundance script generation arguments')
+    optabundancegroup.add_argument("-co", "--covariate", type=str, help="Covariates to generate contrasts against when generating lm")
     optabundancegroup.add_argument("-id", "--SampleID", type=str, help="Column in metadata.txt that identifies samples read in by label_from_colname", default="SampleID")
     optabundancegroup.add_argument("-bm", "--mart_dataset", type=str, help="biomaRt dataset to use. Datasets include: mmusculus_gene_ensembl | hsapiens_gene_ensembl | aplatyrhynchos_gene_ensembl | drerio_gene_ensembl | ggallus_gene_ensembl | oaries_gene_ensembl | rnorvegicus_gene_ensembl | sscrofa_gene_ensembl", default="mmusculus_gene_ensembl")
     optabundancegroup.add_argument("-lm", "--lmBy", type=str, help="Column name in metadata.txt that contains [baseline] value", default="ID_Group")
@@ -607,10 +735,11 @@ def main():
                                   args.baseline, args.SampleID, args.mart_dataset,
                                   args.lmBy, args.gtf_feature, args.read_pattern, args.useme_cols,
                                   args.label_from_colname, args.path_type,
-                                  args.path_norms)
+                                  args.path_norms, args.covariate)
         if args.launch_job:
             generate_slurm_submit_script(args.project_title, args.code_dir)
             launch_slurm_submit_script(args.project_title, args.code_dir)
 
 if __name__ == '__main__':
     main()
+
